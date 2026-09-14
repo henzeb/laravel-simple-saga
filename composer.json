@@ -1,0 +1,75 @@
+{
+    "name": "henzeb/laravel-simple-saga",
+    "description": "A simple saga pattern implementation for Laravel",
+    "keywords": [
+        "henzeb",
+        "laravel",
+        "saga",
+        "saga pattern",
+        "orchestration"
+    ],
+    "homepage": "https://github.com/henzeb/laravel-simple-saga",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Henze Berkheij",
+            "email": "henzeberkheij@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/support": "^11.0|^12.0|^13.0"
+    },
+    "require-dev": {
+        "mockery/mockery": "^1.6",
+        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0",
+        "phpstan/phpstan": "^1.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Henzeb\\Saga\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        },
+        "classmap": [
+            "tests/Support/CoordinatorTestFixtures.php"
+        ]
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test-parallel": "vendor/bin/pest --parallel",
+        "test-coverage-txt": "vendor/bin/pest --coverage",
+        "test-coverage": "XDEBUG_MODE=coverage vendor/bin/pest --coverage-html coverage",
+        "test-dox": "vendor/bin/pest --testdox",
+        "test-mutate": "XDEBUG_MODE=coverage vendor/bin/pest --mutate"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true
+        },
+        "policy": {
+            "advisories": {
+                "block": false
+            }
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Henzeb\\Saga\\Providers\\SagaServiceProvider"
+            ],
+            "aliases": {
+                "Saga": "Henzeb\\Saga\\Facades\\Saga"
+            }
+        }
+    }
+}

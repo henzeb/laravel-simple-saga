@@ -1,0 +1,10 @@
+includes:
+    - vendor/phpstan/phpstan/conf/bleedingEdge.neon
+parameters:
+    scanDirectories:
+        - src
+    paths:
+        - src
+    level: 9
+    ignoreErrors:
+        - '#^Trait Henzeb\\Saga\\Concerns\\IterableSagaStep is used zero times and is not analysed\.$#'
