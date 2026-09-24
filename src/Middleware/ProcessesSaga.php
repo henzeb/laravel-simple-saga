@@ -28,6 +28,11 @@ class ProcessesSaga
             return null;
         }
 
+        if ($coordinator->isCurrentlyInProgress($job->sagaId, $job->sagaStepIndex, $job->branch)
+            && ! $coordinator->isStale($job->sagaId, $job->sagaStepIndex, $job->branch)) {
+            return null; // another delivery is already handling this step; nothing to do
+        }
+
         if ($coordinator->isStale($job->sagaId, $job->sagaStepIndex, $job->branch) && ! $this->shouldRetryStale($job)) {
             $coordinator->stepFailed(
                 $job->sagaId, $job->workflow, $job->sagaStepIndex,

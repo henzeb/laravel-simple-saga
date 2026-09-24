@@ -75,22 +75,58 @@ it('reports isAlreadyCompleted only when the step is currently completed', funct
     expect($coordinator->isAlreadyCompleted('saga-1', 0))->toBeTrue();
 });
 
-it('reports isStale when the step is Running or Compensating with nothing after it', function (SagaStepStatus $status) {
+it('reports isStale when the step is Running or Compensating with its runningExpiresAt in the past', function (SagaStepStatus $status) {
     $driver = new InMemoryDriver();
-    $driver->store(new SagaStepRecord('saga-1', 0, $status));
+    $driver->store(new SagaStepRecord('saga-1', 0, $status, runningExpiresAt: now()->subMinute()->toImmutable()));
 
     $coordinator = new SagaCoordinator($driver);
 
     expect($coordinator->isStale('saga-1', 0))->toBeTrue();
 })->with([SagaStepStatus::Running, SagaStepStatus::Compensating]);
 
-it('reports isStale as false for settled statuses', function (SagaStepStatus $status) {
+it('reports isStale as false when Running or Compensating but runningExpiresAt is still in the future', function (SagaStepStatus $status) {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isStale('saga-1', 0))->toBeFalse();
+})->with([SagaStepStatus::Running, SagaStepStatus::Compensating]);
+
+it('reports isStale as false when Running or Compensating with no declared timeout', function (SagaStepStatus $status) {
     $driver = new InMemoryDriver();
     $driver->store(new SagaStepRecord('saga-1', 0, $status));
 
     $coordinator = new SagaCoordinator($driver);
 
     expect($coordinator->isStale('saga-1', 0))->toBeFalse();
+})->with([SagaStepStatus::Running, SagaStepStatus::Compensating]);
+
+it('reports isStale as false for settled statuses', function (SagaStepStatus $status) {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status, runningExpiresAt: now()->subMinute()->toImmutable()));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isStale('saga-1', 0))->toBeFalse();
+})->with([SagaStepStatus::Pending, SagaStepStatus::Completed, SagaStepStatus::Failed, SagaStepStatus::CompensationPending, SagaStepStatus::Compensated, SagaStepStatus::CompensationFailed, SagaStepStatus::RolledBack]);
+
+it('reports isCurrentlyInProgress when the step is Running or Compensating', function (SagaStepStatus $status) {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isCurrentlyInProgress('saga-1', 0))->toBeTrue();
+})->with([SagaStepStatus::Running, SagaStepStatus::Compensating]);
+
+it('reports isCurrentlyInProgress as false for settled statuses', function (SagaStepStatus $status) {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isCurrentlyInProgress('saga-1', 0))->toBeFalse();
 })->with([SagaStepStatus::Pending, SagaStepStatus::Completed, SagaStepStatus::Failed, SagaStepStatus::CompensationPending, SagaStepStatus::Compensated, SagaStepStatus::CompensationFailed, SagaStepStatus::RolledBack]);
 
 it('stores a fresh Running record when marking a step running', function () {
@@ -719,6 +755,21 @@ it('re-advances a completed step without re-running it, via ensureAdvanced', fun
     Bus::assertDispatched(CoordinatorTestStepTwo::class, function ($job) {
         return $job->sagaStepIndex === 1 && $job->context === ['x' => 1];
     });
+});
+
+it('is a no-op when ensureAdvanced is called again after the next step was already opened', function () {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Completed, payload: ['x' => 1]));
+    $coordinator = new SagaCoordinator($driver);
+
+    $coordinator->ensureAdvanced('saga-1', CoordinatorTestTwoStepWorkflow::class, 0);
+
+    Bus::assertDispatchedTimes(CoordinatorTestStepTwo::class, 1);
+
+    $coordinator->ensureAdvanced('saga-1', CoordinatorTestTwoStepWorkflow::class, 0);
+
+    Bus::assertDispatchedTimes(CoordinatorTestStepTwo::class, 1);
+    expect($driver->get('saga-1')->where('step', 1)->count())->toBe(1);
 });
 
 it('does not dispatch a step whose lock is already held', function () {

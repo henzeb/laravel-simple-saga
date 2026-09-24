@@ -409,11 +409,28 @@ class SagaCoordinator
         return $this->driver->latestFor($sagaId, $step, $branch)?->status === SagaStepStatus::Completed;
     }
 
-    public function isStale(string $sagaId, int $step, int $branch = 0): bool
+    public function isCurrentlyInProgress(string $sagaId, int $step, int $branch = 0): bool
     {
         $status = $this->driver->latestFor($sagaId, $step, $branch)?->status;
 
         return $status === SagaStepStatus::Running || $status === SagaStepStatus::Compensating;
+    }
+
+    public function isStale(string $sagaId, int $step, int $branch = 0): bool
+    {
+        $record = $this->driver->latestFor($sagaId, $step, $branch);
+
+        if ($record === null || ! in_array($record->status, [SagaStepStatus::Running, SagaStepStatus::Compensating], true)) {
+            return false;
+        }
+
+        // No declared timeout means "never considered stale reactively" — only
+        // the proactive sweep-stale command's own timeout config would catch it.
+        if ($record->runningExpiresAt === null) {
+            return false;
+        }
+
+        return now()->greaterThanOrEqualTo($record->runningExpiresAt);
     }
 
     public function markRunning(string $sagaId, string $workflow, int $step, int $branch = 0): void
@@ -662,6 +679,10 @@ class SagaCoordinator
             return;
         }
 
+        if ($this->driver->latestFor($sagaId, $next) !== null) {
+            return; // already advanced past $step by an earlier call — nothing to do
+        }
+
         $this->storeStepEntry($sagaId, $workflow, $steps, $next, $payload, $encrypted);
         $this->dispatchStepEntry($sagaId, $workflow, $steps, $next, $sync);
     }
@@ -856,6 +877,10 @@ class SagaCoordinator
         if ($step < 0) {
             $previous = $this->driver->latestFor($sagaId, 0);
 
+            if ($previous?->status === SagaStepStatus::RolledBack) {
+                return; // already rolled back by an earlier call — nothing to do
+            }
+
             $record = $this->storeAndDispatch(new SagaStepRecord(
                 $sagaId, 0, SagaStepStatus::RolledBack, workflow: $workflow, payload: $previous?->payload, encrypted: $previous !== null && $previous->encrypted
             ), SagaCompensated::class);
@@ -875,8 +900,13 @@ class SagaCoordinator
             return;
         }
 
-        $compensator = $this->resolveCompensator($entry);
         $previous = $this->driver->latestFor($sagaId, $step);
+
+        if ($previous !== null && $previous->status !== SagaStepStatus::Completed) {
+            return; // compensation for this step was already begun by an earlier call — nothing to do
+        }
+
+        $compensator = $this->resolveCompensator($entry);
         $payload = $previous?->payload;
         $encrypted = $previous !== null && $previous->encrypted;
 

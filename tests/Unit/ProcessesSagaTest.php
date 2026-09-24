@@ -3,12 +3,14 @@
 use Henzeb\Saga\Contracts\Driver;
 use Henzeb\Saga\DTO\SagaStepRecord;
 use Henzeb\Saga\Enums\SagaStepStatus;
+use Henzeb\Saga\Events\SagaStepFailed;
 use Henzeb\Saga\Exceptions\StaleSagaStepException;
 use Henzeb\Saga\Middleware\ProcessesSaga;
 use Henzeb\Saga\SagaManager;
 use Illuminate\Contracts\Queue\Job as QueueJob;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Event;
 use Tests\Support\CoordinatorTestOnStaleRetryWorkflow;
 use Tests\Support\CoordinatorTestQueuedRetryStep;
 use Tests\Support\CoordinatorTestRetryWorkflow;
@@ -251,7 +253,7 @@ it('completes a compensator normally once waitFor() returns the delivered signal
 
 it('fails a stale running step by default instead of retrying', function () {
     $driver = bindSagaDriver();
-    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->subMinute()->toImmutable()));
 
     $job = new ProcessesSagaTestForwardStep();
     $job->sagaId = 'saga-1';
@@ -273,9 +275,63 @@ it('fails a stale running step by default instead of retrying', function () {
         ->and($record->reason)->toContain(StaleSagaStepException::class);
 });
 
-it('retries a stale step when the job implements RetryWhenStale', function () {
+it('dismisses a redelivery of a still-running step quietly when its runningExpiresAt has not passed', function () {
+    Event::fake();
+
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $job = new ProcessesSagaTestForwardStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = null;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()->and($result)->toBeNull();
+
+    $record = $driver->latestFor('saga-1', 0);
+
+    expect($record->status)->toBe(SagaStepStatus::Running);
+
+    Event::assertNotDispatched(SagaStepFailed::class);
+});
+
+it('dismisses a redelivery of a still-running step quietly when it has no declared timeout', function () {
+    Event::fake();
+
     $driver = bindSagaDriver();
     $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running));
+
+    $job = new ProcessesSagaTestForwardStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = null;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()->and($result)->toBeNull();
+
+    $record = $driver->latestFor('saga-1', 0);
+
+    expect($record->status)->toBe(SagaStepStatus::Running);
+
+    Event::assertNotDispatched(SagaStepFailed::class);
+});
+
+it('retries a stale step when the job implements RetryWhenStale', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->subMinute()->toImmutable()));
 
     $job = new CoordinatorTestQueuedRetryStep();
     $job->sagaId = 'saga-1';
@@ -297,7 +353,7 @@ it('retries a stale step when the job implements RetryWhenStale', function () {
 
 it('retries a stale step per the workflow\'s onStaleRunning override', function () {
     $driver = bindSagaDriver();
-    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->subMinute()->toImmutable()));
 
     $job = new ProcessesSagaTestForwardStep();
     $job->sagaId = 'saga-1';
@@ -320,7 +376,7 @@ it('retries a stale step per config when neither the job nor the workflow says o
     Config::set('saga.on_stale_running', 'retry');
 
     $driver = bindSagaDriver();
-    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->subMinute()->toImmutable()));
 
     $job = new ProcessesSagaTestForwardStep();
     $job->sagaId = 'saga-1';
