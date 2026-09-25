@@ -29,7 +29,8 @@ class ProcessesSaga
         }
 
         if ($coordinator->isCurrentlyInProgress($job->sagaId, $job->sagaStepIndex, $job->branch)
-            && ! $coordinator->isStale($job->sagaId, $job->sagaStepIndex, $job->branch)) {
+            && ! $coordinator->isStale($job->sagaId, $job->sagaStepIndex, $job->branch)
+            && ! $this->isRetryOfThisJob($job)) {
             return null; // another delivery is already handling this step; nothing to do
         }
 
@@ -114,6 +115,12 @@ class ProcessesSaga
     {
         // @phpstan-ignore-next-line method.notFound (IterableSagaStep::next() is protected by design)
         Closure::bind(fn () => $this->next(), $job, $job::class)();
+    }
+
+    protected function isRetryOfThisJob(object $job): bool
+    {
+        // @phpstan-ignore-next-line property.notFound ($job->job comes from InteractsWithQueue, confirmed present by usesQueueInteraction())
+        return $this->usesQueueInteraction($job) && $job->job && $job->job->attempts() > 1;
     }
 
     protected function isFinalAttempt(object $job): bool

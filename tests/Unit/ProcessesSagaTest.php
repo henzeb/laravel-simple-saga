@@ -476,6 +476,59 @@ it('falls back to $next when compensating a job with an external compensator (no
         ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::RolledBack);
 });
 
+it('lets a queued job retry itself after its own prior attempt left the step Running', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $queueJob = Mockery::mock(QueueJob::class);
+    $queueJob->shouldReceive('isReleased')->andReturn(false);
+    $queueJob->shouldReceive('attempts')->andReturn(2);
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = ['x' => 1];
+    $job->job = $queueJob;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function ($j) use (&$called) {
+        $called = true;
+
+        return $j->handle();
+    });
+
+    expect($called)->toBeTrue()
+        ->and($result)->toBe(['x' => 1])
+        ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::Completed);
+});
+
+it('still dismisses a genuine concurrent duplicate delivery on its first attempt', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $queueJob = Mockery::mock(QueueJob::class);
+    $queueJob->shouldReceive('attempts')->andReturn(1);
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = ['x' => 1];
+    $job->job = $queueJob;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($result)->toBeNull()
+        ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::Running);
+});
+
 it('reports failure on the final attempt and rethrows', function () {
     $driver = bindSagaDriver();
 
