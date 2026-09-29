@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('status');
             $table->string('workflow')->nullable();
             $table->json('payload')->nullable();
-            $table->string('reason')->nullable();
+            $table->text('reason')->nullable();
             $table->timestamp('recorded_at');
             $table->boolean('encrypted')->default(false);
             $table->string('signal')->nullable();
