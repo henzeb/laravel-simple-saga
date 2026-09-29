@@ -131,3 +131,19 @@ itself is the exception: its trail is the complete history.
 `CompensationFailed` and `RolledBack` are both terminal — nothing further happens to
 the saga automatically. See [Retrying a Saga](retrying-sagas.md) for restarting
 either of them without losing the original `sagaId`.
+
+> [!NOTE]
+> `status === SagaStepStatus::Completed` is recorded for every step that finishes,
+> not just the last one — a two-step saga briefly shows `Completed` for step `0` too,
+> before the next record (`Pending` for step `1`) supersedes it. To ask "is the whole
+> saga done?" rather than "did this one step finish?", use `completed()` instead of
+> comparing `status` yourself:
+>
+> ```php
+> if (Saga::workflow(new PlaceOrder(), $event->id)->completed()) {
+>     // every step in PlaceOrder::steps() has finished
+> }
+> ```
+>
+> It checks both that the latest status is `Completed` *and* that its `step` is the
+> workflow's last one, so it's never fooled by that in-between moment.

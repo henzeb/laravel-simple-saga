@@ -7,14 +7,15 @@ use Henzeb\Saga\Enums\SagaStepStatus;
 use Henzeb\Saga\SagaCoordinator;
 use Henzeb\Saga\SagaWorkflow;
 use Tests\Support\CoordinatorTestOneStepWorkflow;
+use Tests\Support\CoordinatorTestTwoStepWorkflow;
 
-function saga_workflow_test_state(SagaStepStatus $status): SagaState
+function saga_workflow_test_state(SagaStepStatus $status, int $step = 0, string $workflow = CoordinatorTestOneStepWorkflow::class): SagaState
 {
     return new SagaState(
         sagaId: 'saga-1',
-        workflow: CoordinatorTestOneStepWorkflow::class,
+        workflow: $workflow,
         status: $status,
-        step: 0,
+        step: $step,
         contextResolver: fn () => new SagaContext(null),
         reason: null,
         trailResolver: fn () => new SagaTrail(),
@@ -200,4 +201,51 @@ it('refuses to retryCompensation() without a sagaId bound via Saga::workflow()',
     $coordinator = Mockery::mock(SagaCoordinator::class);
 
     (new SagaWorkflow($coordinator, $workflow))->retryCompensation();
+})->throws(LogicException::class);
+
+it('reports completed() true when the latest state is Completed on the workflow\'s last step', function () {
+    $workflow = new CoordinatorTestOneStepWorkflow();
+    $state = saga_workflow_test_state(SagaStepStatus::Completed, step: 0);
+
+    $coordinator = Mockery::mock(SagaCoordinator::class);
+    $coordinator->shouldReceive('sagaIdFor')->once()->with($workflow, 'order-123')->andReturn('hashed-id');
+    $coordinator->shouldReceive('current')->once()->with('hashed-id')->andReturn($state);
+
+    $result = (new SagaWorkflow($coordinator, $workflow, sagaId: 'order-123'))->completed();
+
+    expect($result)->toBeTrue();
+});
+
+it('reports completed() false when an earlier step is Completed but later steps remain', function () {
+    $workflow = new CoordinatorTestTwoStepWorkflow();
+    $state = saga_workflow_test_state(SagaStepStatus::Completed, step: 0, workflow: CoordinatorTestTwoStepWorkflow::class);
+
+    $coordinator = Mockery::mock(SagaCoordinator::class);
+    $coordinator->shouldReceive('sagaIdFor')->once()->with($workflow, 'order-123')->andReturn('hashed-id');
+    $coordinator->shouldReceive('current')->once()->with('hashed-id')->andReturn($state);
+
+    $result = (new SagaWorkflow($coordinator, $workflow, sagaId: 'order-123'))->completed();
+
+    expect($result)->toBeFalse();
+});
+
+it('reports completed() false when the latest state is not Completed', function () {
+    $workflow = new CoordinatorTestOneStepWorkflow();
+    $state = saga_workflow_test_state(SagaStepStatus::Running, step: 0);
+
+    $coordinator = Mockery::mock(SagaCoordinator::class);
+    $coordinator->shouldReceive('sagaIdFor')->once()->with($workflow, 'order-123')->andReturn('hashed-id');
+    $coordinator->shouldReceive('current')->once()->with('hashed-id')->andReturn($state);
+
+    $result = (new SagaWorkflow($coordinator, $workflow, sagaId: 'order-123'))->completed();
+
+    expect($result)->toBeFalse();
+});
+
+it('refuses to call completed() without a sagaId bound via Saga::workflow()', function () {
+    $workflow = new CoordinatorTestOneStepWorkflow();
+
+    $coordinator = Mockery::mock(SagaCoordinator::class);
+
+    (new SagaWorkflow($coordinator, $workflow))->completed();
 })->throws(LogicException::class);

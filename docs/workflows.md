@@ -69,8 +69,8 @@ operation this is simply the freshly created saga in its `Pending` state. See
 everything you can read off a `SagaState`, and the next section for the case where the
 whole outcome is already known by the time `start()` returns.
 
-The same `SagaWorkflow` also carries `current()`, `label()`, `signal()`,
-`compensate()`, `retry()`, and `retryCompensation()` — see [Inspecting
+The same `SagaWorkflow` also carries `current()`, `completed()`, `label()`,
+`signal()`, `compensate()`, `retry()`, and `retryCompensation()` — see [Inspecting
 Sagas](inspecting-sagas.md), [Awaiting a Signal](steps.md#awaiting-a-signal), and
 [Retrying a Saga](retrying-sagas.md).
 

@@ -3,6 +3,7 @@
 namespace Henzeb\Saga;
 
 use Henzeb\Saga\DTO\SagaState;
+use Henzeb\Saga\Enums\SagaStepStatus;
 use Illuminate\Support\Str;
 use LogicException;
 
@@ -77,6 +78,16 @@ class SagaWorkflow
         $this->assertBound();
 
         return $this->coordinator->retryCompensation($this->id(), $this->workflow, $sync);
+    }
+
+    public function completed(): bool
+    {
+        $this->assertBound();
+
+        $state = $this->coordinator->current($this->id());
+
+        return $state->status === SagaStepStatus::Completed
+            && $state->step === array_key_last($this->workflow->steps());
     }
 
     protected function assertBound(): void
