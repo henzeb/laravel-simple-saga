@@ -8,6 +8,7 @@ use Henzeb\Saga\Contracts\RetryWhenStale;
 use Henzeb\Saga\Contracts\ShouldCompensate;
 use Henzeb\Saga\Exceptions\AwaitingSignalException;
 use Henzeb\Saga\Exceptions\StaleSagaStepException;
+use Henzeb\Saga\SagaCoordinator;
 use Henzeb\Saga\SagaManager;
 use Henzeb\Saga\WorkflowResolver;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,15 +23,28 @@ class ProcessesSaga
 
         $coordinator->interactsWithSaga($job);
 
+        if (! $coordinator->hasStepRecord($job->sagaId, $job->sagaStepIndex, $job->branch)) {
+            return null; // saga was deleted (or never started) — nothing to do
+        }
+
+        if ($coordinator->isAwaitingSignal($job->sagaId, $job->sagaStepIndex, $job->branch)) {
+            return null; // parked on waitFor(); not this delivery's concern
+        }
+
         if ($coordinator->isAlreadyCompleted($job->sagaId, $job->sagaStepIndex, $job->branch)) {
             $coordinator->ensureAdvanced($job->sagaId, $job->workflow, $job->sagaStepIndex, $job->branch);
 
             return null;
         }
 
+        if ($coordinator->isStepFinished($job->sagaId, $job->sagaStepIndex, $job->branch)) {
+            return null; // settled by another delivery while this one was in flight; nothing to do
+        }
+
         if ($coordinator->isCurrentlyInProgress($job->sagaId, $job->sagaStepIndex, $job->branch)
-            && ! $coordinator->isStale($job->sagaId, $job->sagaStepIndex, $job->branch)
-            && ! $this->isRetryOfThisJob($job)) {
+            && ! $coordinator->isStale($job->sagaId, $job->sagaStepIndex, $job->branch)) {
+            $this->watchOrRelease($job, $coordinator);
+
             return null; // another delivery is already handling this step; nothing to do
         }
 
@@ -65,8 +79,10 @@ class ProcessesSaga
 
             return null;
         } catch (Throwable $exception) {
-            if ($this->isFinalAttempt($job)) {
+            if ($this->isFinalAttempt($job, $coordinator)) {
                 $coordinator->stepFailed($job->sagaId, $job->workflow, $job->sagaStepIndex, $exception, sync: $job->sync, branch: $job->branch);
+            } else {
+                $coordinator->markAttemptFailed($job->sagaId, $job->workflow, $job->sagaStepIndex, $exception, compensating: $compensating, branch: $job->branch);
             }
 
             throw $exception;
@@ -117,21 +133,84 @@ class ProcessesSaga
         Closure::bind(fn () => $this->next(), $job, $job::class)();
     }
 
-    protected function isRetryOfThisJob(object $job): bool
+    // Called when this delivery finds the step still Running/Compensating and
+    // not yet stale — i.e. someone else may genuinely still be handling it.
+    // Keeps a delivery coming back to check again, without ever spending the
+    // step's own $tries budget on pure collisions: while this lineage still has
+    // attempts left, it just releases itself for later; once it's on its own
+    // last attempt, it hands watching duty to a freshly dispatched, independent
+    // copy (see SagaCoordinator::dispatchWatcher()) before letting itself end.
+    protected function watchOrRelease(object $job, SagaCoordinator $coordinator): void
     {
-        // @phpstan-ignore-next-line property.notFound ($job->job comes from InteractsWithQueue, confirmed present by usesQueueInteraction())
-        return $this->usesQueueInteraction($job) && $job->job && $job->job->attempts() > 1;
+        $coordinator->interactsWithSaga($job);
+
+        // The 'sync' connection runs a job immediately, inline, ignoring any
+        // delay — release()ing or dispatching a watcher here would either be a
+        // silent no-op or recurse straight back into this same call stack with
+        // no time actually passing. Neither is safe, so a sync delivery that
+        // finds the step still in progress just ends without either.
+        if ($job->sync || ! $this->usesQueueInteraction($job) || ! $job->job) {
+            return;
+        }
+
+        $attempts = $job->job->attempts();
+        $tries = $job->tries ?? 1;
+
+        // 0 is Laravel's own convention for "retry indefinitely" — never treat
+        // that as "out of attempts, hand off to a watcher".
+        if ($tries === 0 || $attempts < $tries) {
+            $job->job->release($this->watchDelay($job, $attempts));
+
+            return;
+        }
+
+        $coordinator->dispatchWatcher($job, $job->sync, $this->watchDelay($job, $attempts));
     }
 
-    protected function isFinalAttempt(object $job): bool
+    protected function watchDelay(object $job, int $attempts): int
     {
-        app(SagaManager::class)->coordinator()->interactsWithSaga($job);
+        /** @var mixed $backoff */
+        $backoff = $job->backoff ?? null;
+
+        if (is_int($backoff)) {
+            return $backoff;
+        }
+
+        if (is_array($backoff) && $backoff !== []) {
+            // Same convention Laravel's own backoff resolution uses: index by
+            // the attempt just made, clamped to the array's last value once
+            // attempts run past it.
+            $value = $backoff[max(0, $attempts - 1)] ?? end($backoff);
+
+            if (is_int($value)) {
+                return $value;
+            }
+        }
+
+        return 5;
+    }
+
+    protected function isFinalAttempt(object $job, SagaCoordinator $coordinator): bool
+    {
+        $coordinator->interactsWithSaga($job);
 
         if ($job->sync || ! $job instanceof ShouldQueue) {
             return true;
         }
 
-        return ! $job->job || $job->job->attempts() >= ($job->tries ?? 1);
+        if (! $job->job) {
+            return true;
+        }
+
+        $tries = $job->tries ?? 1;
+
+        if ($tries === 0) {
+            return false;
+        }
+
+        $priorFailures = $coordinator->attemptFailureCount($job->sagaId, $job->sagaStepIndex, $job->branch);
+
+        return ($priorFailures + 1) >= $tries;
     }
 
     protected function shouldRetryStale(object $job): bool

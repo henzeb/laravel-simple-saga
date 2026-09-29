@@ -270,7 +270,7 @@ class SagaCoordinator
         }
 
         if (in_array($record->status, [
-            SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::Waiting,
+            SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::AttemptFailed, SagaStepStatus::Waiting,
         ], true)) {
             $this->stepFailed(
                 $sagaId, $record->workflow, $record->step,
@@ -401,12 +401,53 @@ class SagaCoordinator
 
         return $status === SagaStepStatus::CompensationPending
             || $status === SagaStepStatus::Compensating
+            || $status === SagaStepStatus::CompensationAttemptFailed
             || $status === SagaStepStatus::CompensationWaiting;
     }
 
     public function isAlreadyCompleted(string $sagaId, int $step, int $branch = 0): bool
     {
         return $this->driver->latestFor($sagaId, $step, $branch)?->status === SagaStepStatus::Completed;
+    }
+
+    // A step always has a Pending (or later) record before its job is ever
+    // dispatched, so no record at all only ever means the saga was deleted (or
+    // never started) — never a legitimate first delivery. Lets a delayed
+    // release()/watcher (see ProcessesSaga::watchOrRelease()) that outlives a
+    // deleted saga quietly do nothing instead of starting the step fresh
+    // against an empty, garbage context.
+    public function hasStepRecord(string $sagaId, int $step, int $branch = 0): bool
+    {
+        return $this->driver->latestFor($sagaId, $step, $branch) !== null;
+    }
+
+    // Waiting/CompensationWaiting isn't Running/Compensating (so
+    // isCurrentlyInProgress()/isStale() don't see it) and isn't terminal either
+    // (so isStepFinished() doesn't see it) — a delayed release()/watcher (see
+    // ProcessesSaga::watchOrRelease()) that arrives after the real attempt has
+    // since moved on to waitFor() would otherwise fall through every guard and
+    // re-run the step for real, overwriting the parked Waiting record.
+    public function isAwaitingSignal(string $sagaId, int $step, int $branch = 0): bool
+    {
+        $status = $this->driver->latestFor($sagaId, $step, $branch)?->status;
+
+        return $status === SagaStepStatus::Waiting || $status === SagaStepStatus::CompensationWaiting;
+    }
+
+    // A step's own record never transitions again once it lands on one of
+    // these — used to let a watcher (see dispatchWatcher()) that arrives after
+    // the step has already been settled by someone else quietly do nothing,
+    // instead of falling through to isCurrentlyInProgress()/isStale() (which
+    // only recognize Running/Compensating) and re-running the step for real.
+    public function isStepFinished(string $sagaId, int $step, int $branch = 0): bool
+    {
+        return in_array($this->driver->latestFor($sagaId, $step, $branch)?->status, [
+            SagaStepStatus::Completed,
+            SagaStepStatus::Failed,
+            SagaStepStatus::Compensated,
+            SagaStepStatus::CompensationFailed,
+            SagaStepStatus::RolledBack,
+        ], true);
     }
 
     public function isCurrentlyInProgress(string $sagaId, int $step, int $branch = 0): bool
@@ -453,6 +494,58 @@ class SagaCoordinator
             payload: $previous?->payload, encrypted: $previous !== null && $previous->encrypted,
             runningExpiresAt: $this->runningExpiresAt($workflow)
         ), SagaStepCompensating::class);
+    }
+
+    // Written when a queued, non-final attempt genuinely fails — status stays
+    // Running/Compensating as far as this method is concerned (nothing about the
+    // saga's outcome is decided here) but with its OWN status value, so a later
+    // delivery (from this same lineage's own backoff, or from a watcher spawned
+    // by dispatchWatcher()) can tell, with certainty rather than a guess, that
+    // the previous attempt is over and it's safe to run for real. See
+    // isStepFinished()/isCurrentlyInProgress() in ProcessesSaga's guard.
+    public function markAttemptFailed(string $sagaId, string $workflow, int $step, ?Throwable $exception, bool $compensating = false, int $branch = 0): void
+    {
+        $previous = $this->driver->latestFor($sagaId, $step, $branch);
+        $reason = $exception ? $exception::class.': '.$exception->getMessage() : null;
+
+        $this->driver->store(new SagaStepRecord(
+            $sagaId, $step, $compensating ? SagaStepStatus::CompensationAttemptFailed : SagaStepStatus::AttemptFailed,
+            branch: $branch, workflow: $workflow,
+            payload: $previous?->payload, reason: $reason, encrypted: $previous !== null && $previous->encrypted,
+            runningExpiresAt: $previous?->runningExpiresAt,
+        ));
+    }
+
+    // How many times this step has genuinely failed a non-final, queued attempt
+    // so far — used instead of the current delivery's own $job->job->attempts()
+    // to decide whether THIS failure is the final one, because a watcher (see
+    // dispatchWatcher()) that takes the step over runs with its own, fresh
+    // attempts counter, decoupled on purpose from the lineage that keeps
+    // colliding with it.
+    public function attemptFailureCount(string $sagaId, int $step, int $branch = 0): int
+    {
+        return $this->driver->get($sagaId)
+            ->filter(fn (SagaStepRecord $record) => $record->step === $step
+                && $record->branch === $branch
+                && in_array($record->status, [SagaStepStatus::AttemptFailed, SagaStepStatus::CompensationAttemptFailed], true))
+            ->count();
+    }
+
+    // Spawns a fresh, independent delivery of the same job class/step/branch —
+    // its own attempts counter, unrelated to $job's — purely to keep checking
+    // back on a step that's still in progress once $job's own lineage has no
+    // attempts left to release itself for. Goes through the same dispatch-dedup
+    // lock as every other dispatch, so two colliding callers don't each spawn
+    // their own watcher.
+    public function dispatchWatcher(object $job, bool $sync, int $delaySeconds): void
+    {
+        $this->interactsWithSaga($job);
+
+        $watcher = $this->build($job::class, $job->sagaId, $job->workflow, $job->sagaStepIndex, $sync, $job->branch);
+        $this->interactsWithSaga($watcher);
+        $watcher->delay = $delaySeconds;
+
+        $this->dispatch($watcher, $sync);
     }
 
     protected function runningExpiresAt(string $workflow): ?DateTimeImmutable

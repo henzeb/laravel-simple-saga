@@ -89,6 +89,30 @@ it('skips handle() and just advances an already-completed step', function () {
     Bus::assertDispatched(\Tests\Support\CoordinatorTestStepTwo::class);
 });
 
+it('quietly does nothing when a late watcher arrives after the step already settled', function (SagaStepStatus $status) {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status));
+
+    $job = new ProcessesSagaTestForwardStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = null;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($result)->toBeNull()
+        ->and($driver->latestFor('saga-1', 0)->status)->toBe($status);
+})->with([
+    SagaStepStatus::Failed, SagaStepStatus::Compensated,
+    SagaStepStatus::CompensationFailed, SagaStepStatus::RolledBack,
+]);
+
 it('re-dispatches an iterable step at the same index while hasNext() is true', function () {
     $driver = bindSagaDriver();
     $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Pending, payload: ['page' => 1]));
@@ -188,6 +212,48 @@ it('parks a step that calls waitFor() instead of completing it', function () {
         ->and($record->signal)->toBe('approval');
 
     Bus::assertNotDispatched(ProcessesSagaTestAwaitingStep::class);
+});
+
+it('leaves a Waiting step untouched instead of re-running it for a late redelivery', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Waiting, signal: 'approval'));
+
+    $job = new ProcessesSagaTestAwaitingStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestAwaitingWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = null;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($result)->toBeNull()
+        ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::Waiting);
+});
+
+it('leaves a CompensationWaiting step untouched instead of re-running it for a late redelivery', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::CompensationWaiting, signal: 'refunded'));
+
+    $job = new ProcessesSagaTestAwaitingCompensatorStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestAwaitingCompensatorWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = null;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($result)->toBeNull()
+        ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::CompensationWaiting);
 });
 
 it('completes a step normally once waitFor() returns the delivered signal', function () {
@@ -397,6 +463,7 @@ it('retries a stale step per config when neither the job nor the workflow says o
 
 it('marks the step running before calling handle() on a forward job', function () {
     $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Pending));
 
     $job = new ProcessesSagaTestForwardStep();
     $job->sagaId = 'saga-1';
@@ -417,6 +484,7 @@ it('marks the step running before calling handle() on a forward job', function (
 
 it('completes the step and advances after a successful forward run', function () {
     $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Pending));
 
     $job = new ProcessesSagaTestForwardStep();
     $job->sagaId = 'saga-1';
@@ -476,9 +544,9 @@ it('falls back to $next when compensating a job with an external compensator (no
         ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::RolledBack);
 });
 
-it('lets a queued job retry itself after its own prior attempt left the step Running', function () {
+it('lets a queued job retry itself after its own prior attempt was recorded as failed', function () {
     $driver = bindSagaDriver();
-    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::AttemptFailed, runningExpiresAt: now()->addMinute()->toImmutable()));
 
     $queueJob = Mockery::mock(QueueJob::class);
     $queueJob->shouldReceive('isReleased')->andReturn(false);
@@ -504,12 +572,13 @@ it('lets a queued job retry itself after its own prior attempt left the step Run
         ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::Completed);
 });
 
-it('still dismisses a genuine concurrent duplicate delivery on its first attempt', function () {
+it('still dismisses a genuine concurrent duplicate delivery on its first attempt, releasing itself for a later check', function () {
     $driver = bindSagaDriver();
     $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
 
     $queueJob = Mockery::mock(QueueJob::class);
     $queueJob->shouldReceive('attempts')->andReturn(1);
+    $queueJob->shouldReceive('release')->once()->with(5);
 
     $job = new ProcessesSagaTestQueuedStep();
     $job->sagaId = 'saga-1';
@@ -529,8 +598,151 @@ it('still dismisses a genuine concurrent duplicate delivery on its first attempt
         ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::Running);
 });
 
+it('dispatches an independent watcher instead of releasing, once this lineage is on its last attempt', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $queueJob = Mockery::mock(QueueJob::class);
+    $queueJob->shouldReceive('attempts')->andReturn(3); // matches ProcessesSagaTestQueuedStep::$tries
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = ['x' => 1];
+    $job->job = $queueJob;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($result)->toBeNull()
+        ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::Running);
+
+    Bus::assertDispatched(ProcessesSagaTestQueuedStep::class, function ($dispatched) use ($job) {
+        return $dispatched->sagaId === $job->sagaId
+            && $dispatched->sagaStepIndex === $job->sagaStepIndex
+            && $dispatched->delay === 5;
+    });
+});
+
+it('neither releases nor dispatches a watcher for a sync delivery that finds the step still in progress', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $queueJob = Mockery::mock(QueueJob::class);
+    // No expectations set on attempts()/release() — any call fails the test.
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = true;
+    $job->context = ['x' => 1];
+    $job->job = $queueJob;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($result)->toBeNull()
+        ->and($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::Running);
+
+    Bus::assertNotDispatched(ProcessesSagaTestQueuedStep::class);
+});
+
+it('never hands off to a watcher for a job configured to retry indefinitely (tries = 0)', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $queueJob = Mockery::mock(QueueJob::class);
+    $queueJob->shouldReceive('attempts')->andReturn(50);
+    $queueJob->shouldReceive('release')->once()->with(5);
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->tries = 0;
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = ['x' => 1];
+    $job->job = $queueJob;
+
+    (new ProcessesSaga())->handle($job, fn () => null);
+
+    Bus::assertNotDispatched(ProcessesSagaTestQueuedStep::class);
+});
+
+it('indexes an array backoff by the attempt just made when releasing itself', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $queueJob = Mockery::mock(QueueJob::class);
+    $queueJob->shouldReceive('attempts')->andReturn(2);
+    $queueJob->shouldReceive('release')->once()->with(10); // index 1 of [1, 10, 30]
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->tries = 5;
+    $job->backoff = [1, 10, 30];
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = ['x' => 1];
+    $job->job = $queueJob;
+
+    (new ProcessesSaga())->handle($job, fn () => null);
+});
+
+it('clamps an array backoff to its last value once attempts run past it', function () {
+    $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, runningExpiresAt: now()->addMinute()->toImmutable()));
+
+    $queueJob = Mockery::mock(QueueJob::class);
+    $queueJob->shouldReceive('attempts')->andReturn(4);
+    $queueJob->shouldReceive('release')->once()->with(30); // past the array's end
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->tries = 5;
+    $job->backoff = [1, 10, 30];
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = ['x' => 1];
+    $job->job = $queueJob;
+
+    (new ProcessesSaga())->handle($job, fn () => null);
+});
+
+it('does nothing when the saga was deleted (or never started), leaving no record at all', function () {
+    $driver = bindSagaDriver();
+
+    $job = new ProcessesSagaTestForwardStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->sync = false;
+    $job->context = null;
+
+    $called = false;
+    $result = (new ProcessesSaga())->handle($job, function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($result)->toBeNull()
+        ->and($driver->latestFor('saga-1', 0))->toBeNull();
+});
+
 it('reports failure on the final attempt and rethrows', function () {
     $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Pending));
 
     $job = new ProcessesSagaTestForwardStep();
     $job->sagaId = 'saga-1';
@@ -551,6 +763,7 @@ it('reports failure on the final attempt and rethrows', function () {
 
 it('rethrows without reporting failure when a queued job still has attempts left', function () {
     $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Pending));
 
     $queueJob = Mockery::mock(QueueJob::class);
     $queueJob->shouldReceive('isReleased')->andReturn(false);
@@ -571,12 +784,19 @@ it('rethrows without reporting failure when a queued job still has attempts left
     expect($driver->latestFor('saga-1', 0)?->status)->not->toBe(SagaStepStatus::Failed);
 });
 
-it('reports failure once a queued job has exhausted its attempts', function () {
+it('reports failure once the step has already genuinely failed as many times as tries allows', function () {
     $driver = bindSagaDriver();
+    // ProcessesSagaTestQueuedStep::$tries = 3, so 2 prior real failures already
+    // recorded in the trail makes this attempt (the 3rd) the final one — counted
+    // from the trail, not from the current delivery's own $job->job->attempts(),
+    // since that number is meaningless once a watcher (its own fresh lineage)
+    // could be the one making this attempt.
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::AttemptFailed, reason: 'RuntimeException: boom'));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::AttemptFailed, reason: 'RuntimeException: boom'));
 
     $queueJob = Mockery::mock(QueueJob::class);
     $queueJob->shouldReceive('isReleased')->andReturn(false);
-    $queueJob->shouldReceive('attempts')->andReturn(3);
+    $queueJob->shouldReceive('attempts')->andReturn(1); // a fresh watcher's own counter
 
     $job = new ProcessesSagaTestQueuedStep();
     $job->sagaId = 'saga-1';
@@ -595,6 +815,7 @@ it('reports failure once a queued job has exhausted its attempts', function () {
 
 it('does not mark completed when the underlying queue job was released', function () {
     $driver = bindSagaDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Pending));
 
     $queueJob = Mockery::mock(QueueJob::class);
     $queueJob->shouldReceive('isReleased')->andReturn(true);

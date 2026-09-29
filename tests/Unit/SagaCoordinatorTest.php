@@ -28,6 +28,8 @@ use Tests\Support\CoordinatorTestStepTwo;
 use Tests\Support\CoordinatorTestTwoStepWorkflow;
 use Tests\Support\CoordinatorTestInvalidWorkflow;
 use Tests\Support\InMemoryDriver;
+use Tests\Support\ProcessesSagaTestOneStepWorkflow;
+use Tests\Support\ProcessesSagaTestQueuedStep;
 
 beforeEach(function () {
     Bus::fake();
@@ -73,6 +75,33 @@ it('reports isAlreadyCompleted only when the step is currently completed', funct
     $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Completed));
 
     expect($coordinator->isAlreadyCompleted('saga-1', 0))->toBeTrue();
+});
+
+it('reports isAwaitingSignal true for Waiting and CompensationWaiting, false otherwise', function (SagaStepStatus $status, bool $expected) {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isAwaitingSignal('saga-1', 0))->toBe($expected);
+})->with([
+    [SagaStepStatus::Waiting, true],
+    [SagaStepStatus::CompensationWaiting, true],
+    [SagaStepStatus::Running, false],
+    [SagaStepStatus::Compensating, false],
+    [SagaStepStatus::Pending, false],
+    [SagaStepStatus::Completed, false],
+]);
+
+it('reports hasStepRecord false when nothing was ever stored for that step, true otherwise', function () {
+    $driver = new InMemoryDriver();
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->hasStepRecord('saga-1', 0))->toBeFalse();
+
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Pending));
+
+    expect($coordinator->hasStepRecord('saga-1', 0))->toBeTrue();
 });
 
 it('reports isStale when the step is Running or Compensating with its runningExpiresAt in the past', function (SagaStepStatus $status) {
@@ -128,6 +157,120 @@ it('reports isCurrentlyInProgress as false for settled statuses', function (Saga
 
     expect($coordinator->isCurrentlyInProgress('saga-1', 0))->toBeFalse();
 })->with([SagaStepStatus::Pending, SagaStepStatus::Completed, SagaStepStatus::Failed, SagaStepStatus::CompensationPending, SagaStepStatus::Compensated, SagaStepStatus::CompensationFailed, SagaStepStatus::RolledBack]);
+
+it('reports isCompensating true for CompensationAttemptFailed too', function () {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::CompensationAttemptFailed));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isCompensating('saga-1', 0))->toBeTrue();
+});
+
+it('reports isStepFinished true for every terminal status', function (SagaStepStatus $status) {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isStepFinished('saga-1', 0))->toBeTrue();
+})->with([
+    SagaStepStatus::Completed, SagaStepStatus::Failed, SagaStepStatus::Compensated,
+    SagaStepStatus::CompensationFailed, SagaStepStatus::RolledBack,
+]);
+
+it('reports isStepFinished false for every still-in-flight status', function (SagaStepStatus $status) {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, $status));
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->isStepFinished('saga-1', 0))->toBeFalse();
+})->with([
+    SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::AttemptFailed, SagaStepStatus::Waiting,
+    SagaStepStatus::CompensationPending, SagaStepStatus::Compensating, SagaStepStatus::CompensationAttemptFailed,
+    SagaStepStatus::CompensationWaiting,
+]);
+
+it('reports isStepFinished false for a step with no record at all', function () {
+    $coordinator = new SagaCoordinator(new InMemoryDriver());
+
+    expect($coordinator->isStepFinished('saga-1', 0))->toBeFalse();
+});
+
+it('writes an AttemptFailed record carrying the real exception message, keeping payload and runningExpiresAt', function () {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, payload: ['x' => 1], runningExpiresAt: $expiresAt = now()->addMinute()->toImmutable()));
+
+    $coordinator = new SagaCoordinator($driver);
+    $coordinator->markAttemptFailed('saga-1', CoordinatorTestOneStepWorkflow::class, 0, new RuntimeException('boom'));
+
+    $record = $driver->latestFor('saga-1', 0);
+
+    expect($record->status)->toBe(SagaStepStatus::AttemptFailed)
+        ->and($record->reason)->toBe('RuntimeException: boom')
+        ->and($record->payload)->toBe(['x' => 1])
+        ->and($record->runningExpiresAt)->toEqual($expiresAt);
+});
+
+it('writes a CompensationAttemptFailed record when compensating', function () {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Compensating));
+
+    $coordinator = new SagaCoordinator($driver);
+    $coordinator->markAttemptFailed('saga-1', CoordinatorTestOneStepWorkflow::class, 0, new RuntimeException('boom'), compensating: true);
+
+    expect($driver->latestFor('saga-1', 0)->status)->toBe(SagaStepStatus::CompensationAttemptFailed);
+});
+
+it('counts only AttemptFailed/CompensationAttemptFailed records for the given step and branch', function () {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::AttemptFailed));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running));
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::AttemptFailed));
+    $driver->store(new SagaStepRecord('saga-1', 1, SagaStepStatus::AttemptFailed)); // different step
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::CompensationAttemptFailed, branch: 1)); // different branch
+
+    $coordinator = new SagaCoordinator($driver);
+
+    expect($coordinator->attemptFailureCount('saga-1', 0))->toBe(2)
+        ->and($coordinator->attemptFailureCount('saga-1', 0, branch: 1))->toBe(1)
+        ->and($coordinator->attemptFailureCount('saga-1', 1))->toBe(1);
+});
+
+it('starts manual compensation for an AttemptFailed saga via compensate()', function () {
+    $driver = new InMemoryDriver();
+    $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Completed, workflow: CoordinatorTestCompensatingWorkflow::class));
+    $driver->store(new SagaStepRecord('saga-1', 1, SagaStepStatus::AttemptFailed, workflow: CoordinatorTestCompensatingWorkflow::class));
+
+    $coordinator = new SagaCoordinator($driver);
+    $state = $coordinator->compensate('saga-1');
+
+    expect($state->status)->toBe(SagaStepStatus::CompensationPending);
+
+    Bus::assertDispatched(CoordinatorTestRefundStepOne::class);
+});
+
+it('dispatches a fresh, independent copy of the job with the given delay', function () {
+    $driver = new InMemoryDriver();
+    $coordinator = new SagaCoordinator($driver);
+
+    $job = new ProcessesSagaTestQueuedStep();
+    $job->sagaId = 'saga-1';
+    $job->workflow = ProcessesSagaTestOneStepWorkflow::class;
+    $job->sagaStepIndex = 0;
+    $job->branch = 0;
+
+    $coordinator->dispatchWatcher($job, false, 5);
+
+    Bus::assertDispatched(ProcessesSagaTestQueuedStep::class, function ($dispatched) {
+        return $dispatched->sagaId === 'saga-1'
+            && $dispatched->workflow === ProcessesSagaTestOneStepWorkflow::class
+            && $dispatched->sagaStepIndex === 0
+            && $dispatched->delay === 5;
+    });
+});
 
 it('stores a fresh Running record when marking a step running', function () {
     $driver = new InMemoryDriver();
