@@ -67,13 +67,43 @@ PaymentGateway::charge($reference, $amount);
 ## Stale Steps
 
 A trickier case is a redelivered job that finds its own step still marked `Running`
-(or, during rollback, `Compensating`) with nothing written after it. Unlike the
-completed case above, it's genuinely ambiguous here whether the previous attempt's
-side effect happened — the worker could have died a moment before or after actually
-doing the work.
+(or, during rollback, `Compensating`) with nothing written after it. Two different
+situations look identical at first glance here, and the package tells them apart
+instead of guessing.
 
-Rather than guess, this is treated as a failure by default. You may change that in
-three places, checked in this order:
+**The previous attempt genuinely failed** — it threw, wasn't the final attempt, so
+nothing about your `$tries`/`$backoff` changed, but before Laravel's own backoff
+requeues it, the step is recorded `AttemptFailed` (or `CompensationAttemptFailed` mid-
+rollback) instead of being left on `Running`. That status is only ever written the
+moment a failure genuinely happened, so any later delivery that finds it — the same
+job's own backoff-driven redelivery, or an independent watcher, see below — knows for
+a fact the previous attempt is over and picks the step up for real. No guessing, no
+reliance on the delivery's own attempt count (which is meaningless once a watcher with
+its own counter is the one making the attempt).
+
+**The step is still on `Running`/`Compensating` with no such record** — this is the
+genuinely ambiguous case: the worker could have died a moment before or after actually
+doing the work. A redelivery here — most commonly caused by a queue `retry_after`
+shorter than the step actually takes — is dismissed quietly rather than run again,
+exactly as for the completed case above. Unlike a plain duplicate, though, this
+delivery doesn't just vanish: while its own `$tries` still has room, it releases
+itself to check again later (respecting `$backoff`, array or plain int, and never
+treating `$tries = 0` as "out of attempts"); once it's on its own last attempt, it
+hands watching duty to an independent, freshly dispatched copy with its own attempts
+counter before ending. That way a step can never be abandoned by a stray collision,
+and a collision never spends the step's own retry budget — only a genuine
+`AttemptFailed` does that. This checking-in cycle stops as soon as the step settles
+one way or another, or once it's genuinely stale (below).
+
+> [!NOTE]
+> A late-arriving redelivery — the job's own retry, or a watcher — that finds the
+> step has since moved on (settled, or parked on [`waitFor()`](steps.md#awaiting-a-signal))
+> does nothing instead of re-running it; the same goes for a saga that was deleted in
+> the meantime. None of this ever touches your step's own logic twice.
+
+Once a step really is stale — `Running`/`Compensating` past its own `runningTimeout()`
+— that ambiguity is resolved the same way as before. You may change what happens then
+in three places, checked in this order:
 
 1. **Per step** — implement the `RetryWhenStale` marker interface on the step class to
    always retry when found stale, regardless of anything else:
