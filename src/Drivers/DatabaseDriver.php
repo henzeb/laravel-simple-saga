@@ -96,7 +96,10 @@ class DatabaseDriver implements Driver
         return new SagaStepRecords($this->connection->table($this->table)
             ->joinSub($latestIds, 'latest', $this->table.'.id', '=', 'latest.id')
             ->select($this->table.'.*')
-            ->whereIn('status', [SagaStepStatus::Running->value, SagaStepStatus::Compensating->value])
+            ->whereIn('status', [
+                SagaStepStatus::Running->value, SagaStepStatus::AttemptFailed->value,
+                SagaStepStatus::Compensating->value, SagaStepStatus::CompensationAttemptFailed->value,
+            ])
             ->whereNotNull('running_expires_at')
             ->where('running_expires_at', '<=', $before)
             ->get()

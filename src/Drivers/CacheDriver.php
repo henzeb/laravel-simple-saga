@@ -141,7 +141,10 @@ class CacheDriver implements Driver
         $before ??= now();
         $due = [];
 
-        foreach ([SagaStepStatus::Running, SagaStepStatus::Compensating] as $status) {
+        foreach ([
+            SagaStepStatus::Running, SagaStepStatus::AttemptFailed,
+            SagaStepStatus::Compensating, SagaStepStatus::CompensationAttemptFailed,
+        ] as $status) {
             /** @var string[] $sagaIds */
             $sagaIds = $this->cache->get($this->indexKey($status), []);
 

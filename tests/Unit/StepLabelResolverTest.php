@@ -222,6 +222,7 @@ it('labels by the external compensator for every compensating status', function 
 })->with([
     SagaStepStatus::CompensationPending,
     SagaStepStatus::Compensating,
+    SagaStepStatus::CompensationAttemptFailed,
     SagaStepStatus::CompensationWaiting,
     SagaStepStatus::Compensated,
     SagaStepStatus::CompensationFailed,

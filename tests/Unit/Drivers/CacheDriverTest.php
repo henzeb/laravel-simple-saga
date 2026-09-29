@@ -115,6 +115,17 @@ it('finds compensating sagas whose running step has passed its timeout', functio
     expect($driver->dueRunning())->toHaveCount(1);
 });
 
+it('finds AttemptFailed/CompensationAttemptFailed sagas whose running step has passed its timeout', function () {
+    $driver = makeCacheDriver();
+
+    $driver->store(new SagaStepRecord('saga-attempt-failed', 0, SagaStepStatus::AttemptFailed, runningExpiresAt: new DateTimeImmutable('2020-01-01')));
+    $driver->store(new SagaStepRecord('saga-compensation-attempt-failed', 0, SagaStepStatus::CompensationAttemptFailed, runningExpiresAt: new DateTimeImmutable('2020-01-01')));
+
+    $due = $driver->dueRunning(new DateTimeImmutable('2025-01-01'));
+
+    expect($due)->toHaveCount(2);
+});
+
 it('returns an empty trail for an unknown saga', function () {
     expect(makeCacheDriver()->get('missing'))->toHaveCount(0);
 });

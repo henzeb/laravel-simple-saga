@@ -19,11 +19,13 @@ class SagaShowCommand extends Command
     protected const COLORS = [
         SagaStepStatus::Pending->value => 'yellow',
         SagaStepStatus::Running->value => 'yellow',
+        SagaStepStatus::AttemptFailed->value => 'yellow',
         SagaStepStatus::Waiting->value => 'yellow',
         SagaStepStatus::Completed->value => 'green',
         SagaStepStatus::Failed->value => 'red',
         SagaStepStatus::CompensationPending->value => 'cyan',
         SagaStepStatus::Compensating->value => 'cyan',
+        SagaStepStatus::CompensationAttemptFailed->value => 'cyan',
         SagaStepStatus::CompensationWaiting->value => 'cyan',
         SagaStepStatus::Compensated->value => 'green',
         SagaStepStatus::CompensationFailed->value => 'red',

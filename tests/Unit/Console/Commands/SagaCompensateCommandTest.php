@@ -39,6 +39,18 @@ it('compensates a single stuck saga', function () {
     });
 });
 
+it('compensates a saga stuck on AttemptFailed', function () {
+    insertStuckSaga('01M2K6VH0H0HT2ZP4RVMWT6AAY', CoordinatorTestCompensatingWorkflow::class, status: 'attempt_failed');
+
+    $this->artisan('saga:compensate', ['sagaId' => '01M2K6VH0H0HT2ZP4RVMWT6AAY'])
+        ->expectsOutputToContain('compensation started')
+        ->assertExitCode(0);
+
+    Bus::assertDispatched(CoordinatorTestRefundStepOne::class, function ($job) {
+        return $job->sagaId === '01M2K6VH0H0HT2ZP4RVMWT6AAY';
+    });
+});
+
 it('propagates --sync into the compensation it starts', function () {
     insertStuckSaga('01M2K6VH0H0HT2ZP4RVMWT6AAY', CoordinatorTestCompensatingWorkflow::class);
 
@@ -113,6 +125,16 @@ it('bulk-compensates every saga stuck mid-run when no sagaId is given', function
 
     Bus::assertDispatched(CoordinatorTestRefundStepOne::class);
     Bus::assertDispatched(CoordinatorTestSelfCompensatingStep::class);
+});
+
+it('bulk-compensates a saga stuck on AttemptFailed too', function () {
+    insertStuckSaga('01M2K6VH0H0HT2ZP4RVMWT6AAY', CoordinatorTestCompensatingWorkflow::class, 'attempt_failed');
+
+    $this->artisan('saga:compensate')
+        ->expectsOutputToContain('Compensated 1 saga(s).')
+        ->assertExitCode(0);
+
+    Bus::assertDispatched(CoordinatorTestRefundStepOne::class);
 });
 
 it('bulk-compensates only sagas of the given --workflow', function () {

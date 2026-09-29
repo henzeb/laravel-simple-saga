@@ -62,6 +62,7 @@ class StepLabelResolver
         return in_array($status, [
             SagaStepStatus::CompensationPending,
             SagaStepStatus::Compensating,
+            SagaStepStatus::CompensationAttemptFailed,
             SagaStepStatus::CompensationWaiting,
             SagaStepStatus::Compensated,
             SagaStepStatus::CompensationFailed,
