@@ -17,7 +17,8 @@ class CacheDriver implements Driver
     public function __construct(
         protected Repository $cache,
         protected ?int $ttl = null,
-    ) {}
+    ) {
+    }
 
     public function store(SagaStepRecord $record): void
     {

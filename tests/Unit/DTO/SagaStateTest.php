@@ -109,8 +109,7 @@ it('memoizes the resolved label, resolving StepLabelResolver only once', functio
     app()->bind(StepLabelResolver::class, function () use (&$calls) {
         $calls++;
 
-        return new class extends StepLabelResolver
-        {
+        return new class () extends StepLabelResolver {
             public function resolve(SagaState $state): ?string
             {
                 return 'Custom Label';
@@ -131,8 +130,7 @@ it('memoizes a null label, without re-resolving StepLabelResolver', function () 
     app()->bind(StepLabelResolver::class, function () use (&$calls) {
         $calls++;
 
-        return new class extends StepLabelResolver
-        {
+        return new class () extends StepLabelResolver {
             public function resolve(SagaState $state): ?string
             {
                 return null;

@@ -18,7 +18,8 @@ class StepLabelResolver
 
     public function __construct(
         protected WorkflowResolver $resolver = new WorkflowResolver(),
-    ) {}
+    ) {
+    }
 
     public function resolve(SagaState $state): ?string
     {

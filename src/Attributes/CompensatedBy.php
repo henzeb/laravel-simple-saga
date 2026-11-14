@@ -12,5 +12,6 @@ class CompensatedBy
      */
     public function __construct(
         public readonly string $compensator,
-    ) {}
+    ) {
+    }
 }

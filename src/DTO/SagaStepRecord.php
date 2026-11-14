@@ -20,7 +20,8 @@ class SagaStepRecord
         public readonly ?string $signal = null,
         public readonly ?DateTimeImmutable $signalExpiresAt = null,
         public readonly ?DateTimeImmutable $runningExpiresAt = null,
-    ) {}
+    ) {
+    }
 
     public function context(): SagaContext
     {

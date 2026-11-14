@@ -10,5 +10,6 @@ class SagaCompensationFailed
     public function __construct(
         public readonly SagaState $state,
         public readonly ?Throwable $exception,
-    ) {}
+    ) {
+    }
 }

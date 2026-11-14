@@ -12,7 +12,8 @@ class SagaFake
     public function __construct(
         protected Driver $driver,
         protected BusFake $bus,
-    ) {}
+    ) {
+    }
 
     /**
      * @param array<int, class-string> $jobs
@@ -29,7 +30,8 @@ class SagaFake
         $actual = $this->driver->latest($sagaId)?->status;
 
         PHPUnit::assertSame(
-            $status, $actual,
+            $status,
+            $actual,
             "Expected saga [{$sagaId}] to have status [{$status->value}], but it has ".
             ($actual === null ? 'no recorded state' : "[{$actual->value}]").'.'
         );

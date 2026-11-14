@@ -30,7 +30,8 @@ class SagaState
         public readonly ?DateTimeImmutable $signalExpiresAt = null,
         public readonly ?DateTimeImmutable $recordedAt = null,
         public readonly ?DateTimeImmutable $runningExpiresAt = null,
-    ) {}
+    ) {
+    }
 
     public function context(): SagaContext
     {

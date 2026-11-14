@@ -169,4 +169,3 @@ it('cancels without retrying when not confirmed in production', function () {
 
     Bus::assertNothingDispatched();
 });
-

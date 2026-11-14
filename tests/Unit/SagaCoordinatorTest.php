@@ -481,7 +481,10 @@ it('fails every due running step, cascading exactly like any other forward or co
     $driver = new InMemoryDriver();
     $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Running, workflow: CoordinatorTestOneStepWorkflow::class));
     $driver->store(new SagaStepRecord(
-        'saga-2', 0, SagaStepStatus::Compensating, workflow: CoordinatorTestSelfCompensatingWorkflow::class
+        'saga-2',
+        0,
+        SagaStepStatus::Compensating,
+        workflow: CoordinatorTestSelfCompensatingWorkflow::class
     ));
     $coordinator = new SagaCoordinator($driver);
 
@@ -502,7 +505,11 @@ it('fails every due signal, cascading exactly like any other forward or compensa
     $driver = new InMemoryDriver();
     $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Waiting, workflow: CoordinatorTestOneStepWorkflow::class, signal: 'approval'));
     $driver->store(new SagaStepRecord(
-        'saga-2', 0, SagaStepStatus::CompensationWaiting, workflow: CoordinatorTestSelfCompensatingWorkflow::class, signal: 'refunded'
+        'saga-2',
+        0,
+        SagaStepStatus::CompensationWaiting,
+        workflow: CoordinatorTestSelfCompensatingWorkflow::class,
+        signal: 'refunded'
     ));
     $coordinator = new SagaCoordinator($driver);
 
@@ -555,8 +562,12 @@ it('propagates sync: true from sweepSignals() through to the compensation it sta
     $driver = new InMemoryDriver();
     $driver->store(new SagaStepRecord('saga-1', 0, SagaStepStatus::Completed, workflow: CoordinatorTestCompensatingWorkflow::class, payload: ['order' => 1]));
     $driver->store(new SagaStepRecord(
-        'saga-1', 1, SagaStepStatus::Waiting, workflow: CoordinatorTestCompensatingWorkflow::class,
-        signal: 'approval', signalExpiresAt: new DateTimeImmutable('2020-01-01')
+        'saga-1',
+        1,
+        SagaStepStatus::Waiting,
+        workflow: CoordinatorTestCompensatingWorkflow::class,
+        signal: 'approval',
+        signalExpiresAt: new DateTimeImmutable('2020-01-01')
     ));
     $coordinator = new SagaCoordinator($driver);
 
@@ -1246,8 +1257,7 @@ it('throws when signalling a CompensationWaiting step whose step has no compensa
 })->throws(LogicException::class, 'is CompensationWaiting but has no compensator to resume.');
 
 it('throws when beginSaga cannot read back the step 0 record it just stored', function () {
-    $driver = new class extends InMemoryDriver
-    {
+    $driver = new class () extends InMemoryDriver {
         public function store(SagaStepRecord $record): void
         {
             // intentionally does not persist, to simulate a broken driver
@@ -1303,8 +1313,7 @@ it('throws when failDueRunning() is given a record with no recorded workflow', f
 })->throws(LogicException::class, 'has no recorded workflow.');
 
 it('throws when a parallel group\'s branch has no recorded state left to merge', function () {
-    $driver = new class extends InMemoryDriver
-    {
+    $driver = new class () extends InMemoryDriver {
         private array $seen = [];
 
         public function latestFor(string $sagaId, int $step, int $branch = 0): ?SagaStepRecord

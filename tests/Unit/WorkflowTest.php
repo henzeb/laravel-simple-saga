@@ -3,7 +3,7 @@
 use Henzeb\Saga\Workflow;
 
 it('defers onStaleRunning to config by default', function () {
-    $workflow = new class extends Workflow {
+    $workflow = new class () extends Workflow {
         public function steps(): array
         {
             return [];
@@ -14,7 +14,7 @@ it('defers onStaleRunning to config by default', function () {
 });
 
 it('allows a workflow to override onStaleRunning', function () {
-    $workflow = new class extends Workflow {
+    $workflow = new class () extends Workflow {
         public function steps(): array
         {
             return [];
@@ -30,7 +30,7 @@ it('allows a workflow to override onStaleRunning', function () {
 });
 
 it('defers signalTimeout to config by default', function () {
-    $workflow = new class extends Workflow {
+    $workflow = new class () extends Workflow {
         public function steps(): array
         {
             return [];
@@ -41,7 +41,7 @@ it('defers signalTimeout to config by default', function () {
 });
 
 it('allows a workflow to override signalTimeout', function () {
-    $workflow = new class extends Workflow {
+    $workflow = new class () extends Workflow {
         public function steps(): array
         {
             return [];

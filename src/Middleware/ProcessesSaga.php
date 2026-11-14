@@ -50,9 +50,12 @@ class ProcessesSaga
 
         if ($coordinator->isStale($job->sagaId, $job->sagaStepIndex, $job->branch) && ! $this->shouldRetryStale($job)) {
             $coordinator->stepFailed(
-                $job->sagaId, $job->workflow, $job->sagaStepIndex,
+                $job->sagaId,
+                $job->workflow,
+                $job->sagaStepIndex,
                 new StaleSagaStepException($job->sagaId, $job->sagaStepIndex),
-                sync: $job->sync, branch: $job->branch
+                sync: $job->sync,
+                branch: $job->branch
             );
 
             return null;
@@ -73,8 +76,13 @@ class ProcessesSaga
                 : $next($job);
         } catch (AwaitingSignalException $exception) {
             $coordinator->stepAwaitsSignal(
-                $job->sagaId, $job->workflow, $job->sagaStepIndex, $exception->signal, $job->context,
-                compensating: $compensating, branch: $job->branch
+                $job->sagaId,
+                $job->workflow,
+                $job->sagaStepIndex,
+                $exception->signal,
+                $job->context,
+                compensating: $compensating,
+                branch: $job->branch
             );
 
             return null;
@@ -96,16 +104,26 @@ class ProcessesSaga
             $this->advance($job);
 
             $coordinator->stepIterated(
-                $job->sagaId, $job->workflow, $job->sagaStepIndex, $job->context,
-                compensating: $compensating, sync: $job->sync, branch: $job->branch
+                $job->sagaId,
+                $job->workflow,
+                $job->sagaStepIndex,
+                $job->context,
+                compensating: $compensating,
+                sync: $job->sync,
+                branch: $job->branch
             );
 
             return $result;
         }
 
         $coordinator->stepCompleted(
-            $job->sagaId, $job->workflow, $job->sagaStepIndex, $result,
-            compensating: $compensating, sync: $job->sync, branch: $job->branch
+            $job->sagaId,
+            $job->workflow,
+            $job->sagaStepIndex,
+            $result,
+            compensating: $compensating,
+            sync: $job->sync,
+            branch: $job->branch
         );
 
         return $result;

@@ -20,7 +20,8 @@ class SagaContext
     public function __construct(
         private readonly mixed $payload,
         private readonly bool $encrypted = false,
-    ) {}
+    ) {
+    }
 
     protected function resolve(): mixed
     {

@@ -8,5 +8,6 @@ class SagaStepCompensating
 {
     public function __construct(
         public readonly SagaState $state,
-    ) {}
+    ) {
+    }
 }

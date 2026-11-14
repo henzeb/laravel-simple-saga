@@ -10,5 +10,9 @@ use Illuminate\Queue\SerializesModels;
 
 abstract class SagaStep
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
+    use InteractsWithSaga;
 }

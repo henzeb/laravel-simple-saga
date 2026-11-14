@@ -21,7 +21,6 @@ use Tests\Support\ProcessesSagaTestAwaitingStep;
 use Tests\Support\ProcessesSagaTestAwaitingWorkflow;
 use Tests\Support\ProcessesSagaTestExternalCompensatorStep;
 use Tests\Support\ProcessesSagaTestExternalCompensatorWorkflow;
-use Tests\Support\ProcessesSagaTestExternallyCompensatedStep;
 use Tests\Support\ProcessesSagaTestForwardStep;
 use Tests\Support\ProcessesSagaTestIterableCompensatingStep;
 use Tests\Support\ProcessesSagaTestIterableCompensatingWorkflow;
@@ -41,7 +40,7 @@ function bindSagaDriver(): InMemoryDriver
     // the same way production code does — so tests swap the driver in the same
     // place SagaManager builds one, rather than binding Driver::class directly.
     app()->extend(SagaManager::class, function ($service, $app) use ($driver) {
-        return new class($driver, $app) extends SagaManager {
+        return new class ($driver, $app) extends SagaManager {
             public function __construct(protected Driver $fixedDriver, $container)
             {
                 parent::__construct($container);

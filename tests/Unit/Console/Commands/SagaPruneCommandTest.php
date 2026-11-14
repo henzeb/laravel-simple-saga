@@ -1,6 +1,5 @@
 <?php
 
-use Henzeb\Saga\DTO\SagaStepRecord;
 use Henzeb\Saga\Enums\SagaStepStatus;
 use Illuminate\Support\Facades\DB;
 

@@ -151,7 +151,9 @@ it('resolves a #[StepLabel] pointing at an invokable class, passing it the step\
     $resolver = new StepLabelResolver();
 
     $label = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestInvokableLabeledWorkflow::class, 0, ['sku' => 'ABC-123']
+        StepLabelResolverTestInvokableLabeledWorkflow::class,
+        0,
+        ['sku' => 'ABC-123']
     ));
 
     expect($label)->toBe('Invoked: ABC-123');
@@ -161,7 +163,9 @@ it('resolves a #[StepLabel] pointing at a class implementing ProvidesStepLabel',
     $resolver = new StepLabelResolver();
 
     $label = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestInterfaceLabeledWorkflow::class, 0, ['sku' => 'XYZ-789']
+        StepLabelResolverTestInterfaceLabeledWorkflow::class,
+        0,
+        ['sku' => 'XYZ-789']
     ));
 
     expect($label)->toBe('Resolved: XYZ-789');
@@ -195,7 +199,9 @@ it('labels a forward step by its own class while it is still forward', function 
     $resolver = new StepLabelResolver();
 
     $label = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestExternalCompensatorWorkflow::class, 0, status: SagaStepStatus::Completed
+        StepLabelResolverTestExternalCompensatorWorkflow::class,
+        0,
+        status: SagaStepStatus::Completed
     ));
 
     expect($label)->toBe('Reserve Stock');
@@ -205,7 +211,9 @@ it('labels a step by its external compensator once it is compensating, not by th
     $resolver = new StepLabelResolver();
 
     $label = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestExternalCompensatorWorkflow::class, 0, status: SagaStepStatus::Compensating
+        StepLabelResolverTestExternalCompensatorWorkflow::class,
+        0,
+        status: SagaStepStatus::Compensating
     ));
 
     expect($label)->toBe('Release Stock');
@@ -215,7 +223,9 @@ it('labels by the external compensator for every compensating status', function 
     $resolver = new StepLabelResolver();
 
     $label = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestExternalCompensatorWorkflow::class, 0, status: $status
+        StepLabelResolverTestExternalCompensatorWorkflow::class,
+        0,
+        status: $status
     ));
 
     expect($label)->toBe('Release Stock');
@@ -233,10 +243,14 @@ it('labels a self-compensating step the same way whether forward or compensating
     $resolver = new StepLabelResolver();
 
     $forward = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestSelfCompensatingWorkflow::class, 0, status: SagaStepStatus::Completed
+        StepLabelResolverTestSelfCompensatingWorkflow::class,
+        0,
+        status: SagaStepStatus::Completed
     ));
     $compensating = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestSelfCompensatingWorkflow::class, 0, status: SagaStepStatus::Compensating
+        StepLabelResolverTestSelfCompensatingWorkflow::class,
+        0,
+        status: SagaStepStatus::Compensating
     ));
 
     expect($forward)->toBe('Refund Payment')
@@ -247,7 +261,9 @@ it('falls back to the step\'s own label when compensating a step with no compens
     $resolver = new StepLabelResolver();
 
     $label = $resolver->resolve(stepLabelResolverTestState(
-        StepLabelResolverTestLabeledWorkflow::class, 0, status: SagaStepStatus::Compensated
+        StepLabelResolverTestLabeledWorkflow::class,
+        0,
+        status: SagaStepStatus::Compensated
     ));
 
     expect($label)->toBe('Charge Payment');

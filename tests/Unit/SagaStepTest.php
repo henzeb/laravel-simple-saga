@@ -6,7 +6,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 
 it('does not require ShouldQueue, so it can run synchronously', function () {
-    $step = new class extends SagaStep {
+    $step = new class () extends SagaStep {
         public function handle(): string
         {
             return 'done';
@@ -18,7 +18,7 @@ it('does not require ShouldQueue, so it can run synchronously', function () {
 });
 
 it('carries the saga state a step needs, and can opt into ShouldQueue', function () {
-    $step = new class extends SagaStep implements ShouldQueue {
+    $step = new class () extends SagaStep implements ShouldQueue {
         public function handle(): string
         {
             return 'done';

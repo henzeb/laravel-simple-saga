@@ -8,5 +8,6 @@ class SagaStarted
 {
     public function __construct(
         public readonly SagaState $state,
-    ) {}
+    ) {
+    }
 }

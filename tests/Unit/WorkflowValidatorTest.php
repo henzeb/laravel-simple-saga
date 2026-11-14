@@ -165,8 +165,10 @@ it('validates each branch of a Parallel entry like a plain step', function () {
 it('memoizes validation per workflow class, validating only once', function () {
     $calls = 0;
 
-    $workflow = new class($calls) extends Workflow {
-        public function __construct(private int &$calls) {}
+    $workflow = new class ($calls) extends Workflow {
+        public function __construct(private int &$calls)
+        {
+        }
 
         public function steps(): array
         {

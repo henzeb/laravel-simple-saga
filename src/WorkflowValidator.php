@@ -6,7 +6,6 @@ use Henzeb\Saga\Attributes\CompensatedBy;
 use Henzeb\Saga\Concerns\InteractsWithSaga;
 use Henzeb\Saga\Contracts\ShouldCompensate;
 use Henzeb\Saga\Exceptions\InvalidWorkflowException;
-use Henzeb\Saga\Parallel;
 use ReflectionClass;
 
 class WorkflowValidator

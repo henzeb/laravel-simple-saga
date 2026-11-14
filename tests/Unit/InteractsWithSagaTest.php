@@ -5,7 +5,7 @@ use Henzeb\Saga\DTO\SagaContext;
 use Henzeb\Saga\Exceptions\AwaitingSignalException;
 
 it('wraps its raw context in a SagaContext', function () {
-    $job = new class {
+    $job = new class () {
         use InteractsWithSaga;
 
         public function callContext(): SagaContext
@@ -24,7 +24,7 @@ it('wraps its raw context in a SagaContext', function () {
 
 function interactsWithSagaTestJob(): object
 {
-    return new class {
+    return new class () {
         use InteractsWithSaga;
 
         public function callWaitFor(string $name): SagaContext

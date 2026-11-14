@@ -100,7 +100,7 @@ it('asserts the value matches a valid case when narrowing via enum()', function 
 it('resolves a model identifier payload back into the real model', function () {
     $model = SagaContextTestModel::create(['name' => 'foo']);
 
-    $serializer = new class {
+    $serializer = new class () {
         use Illuminate\Queue\SerializesAndRestoresModelIdentifiers;
 
         public function serialize(mixed $value): mixed

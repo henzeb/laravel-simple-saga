@@ -3,7 +3,9 @@
 use Henzeb\Saga\Attributes\CompensatedBy;
 
 #[CompensatedBy(stdClass::class)]
-class CompensatedByTestStep {}
+class CompensatedByTestStep
+{
+}
 
 it('exposes the compensator class it was constructed with', function () {
     $compensatedBy = new CompensatedBy(stdClass::class);

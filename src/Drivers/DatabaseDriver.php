@@ -18,7 +18,8 @@ class DatabaseDriver implements Driver
     public function __construct(
         protected ConnectionInterface $connection,
         protected string $table = 'saga_steps',
-    ) {}
+    ) {
+    }
 
     public function store(SagaStepRecord $record): void
     {

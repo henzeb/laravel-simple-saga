@@ -14,7 +14,8 @@ use Illuminate\Foundation\Bus\Dispatchable;
 
 class CoordinatorTestStepOne
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -24,7 +25,8 @@ class CoordinatorTestStepOne
 
 class CoordinatorTestStepTwo
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -48,7 +50,8 @@ class CoordinatorTestEncryptedWorkflow extends Workflow
 #[CompensatedBy(CoordinatorTestRefundStepOne::class)]
 class CoordinatorTestCompensatedStepOne
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -58,7 +61,8 @@ class CoordinatorTestCompensatedStepOne
 
 class CoordinatorTestRefundStepOne implements ShouldCompensate
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -68,7 +72,8 @@ class CoordinatorTestRefundStepOne implements ShouldCompensate
 
 class CoordinatorTestSelfCompensatingStep implements ShouldCompensate
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -83,7 +88,8 @@ class CoordinatorTestSelfCompensatingStep implements ShouldCompensate
 
 class CoordinatorTestNoCompensatorStep
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -141,7 +147,8 @@ class CoordinatorTestSelfCompensatingWorkflow extends Workflow
 #[CompensatedBy(CoordinatorTestResumeWritingStep::class)]
 class CoordinatorTestPauseWritingStep implements ShouldCompensate
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     // no compensate() — handle() doubles as both this step's own forward action
     // and the compensation dispatched for CoordinatorTestResumeWritingStep.
@@ -154,7 +161,8 @@ class CoordinatorTestPauseWritingStep implements ShouldCompensate
 #[CompensatedBy(CoordinatorTestPauseWritingStep::class)]
 class CoordinatorTestResumeWritingStep implements ShouldCompensate
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -173,7 +181,8 @@ class CoordinatorTestMutualCompensatorWorkflow extends Workflow
 #[CompensatedBy(CoordinatorTestRefundStepOne::class)]
 class CoordinatorTestInterruptedStepTwo
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -270,7 +279,8 @@ class CoordinatorTestRunningTimeoutWorkflow extends Workflow
 #[CompensatedBy(CoordinatorTestParallelBeforeRefundStep::class)]
 class CoordinatorTestParallelBeforeStep
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -280,7 +290,8 @@ class CoordinatorTestParallelBeforeStep
 
 class CoordinatorTestParallelBeforeRefundStep implements ShouldCompensate
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -290,7 +301,8 @@ class CoordinatorTestParallelBeforeRefundStep implements ShouldCompensate
 
 class CoordinatorTestParallelBranchA
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -300,7 +312,8 @@ class CoordinatorTestParallelBranchA
 
 class CoordinatorTestParallelBranchB implements ShouldCompensate
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {
@@ -315,7 +328,8 @@ class CoordinatorTestParallelBranchB implements ShouldCompensate
 
 class CoordinatorTestParallelAfterStep
 {
-    use Dispatchable, InteractsWithSaga;
+    use Dispatchable;
+    use InteractsWithSaga;
 
     public function handle(): mixed
     {

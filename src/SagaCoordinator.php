@@ -34,7 +34,6 @@ use Henzeb\Saga\Exceptions\SagaNotRetryableException;
 use Henzeb\Saga\Exceptions\SignalTimeoutException;
 use Henzeb\Saga\Exceptions\StaleSagaStepException;
 use Henzeb\Saga\Middleware\ProcessesSaga;
-use Henzeb\Saga\Parallel;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Events\Dispatcher as EventDispatcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -68,7 +67,8 @@ class SagaCoordinator
         protected Driver $driver,
         protected WorkflowValidator $validator = new WorkflowValidator(),
         protected WorkflowResolver $resolver = new WorkflowResolver(),
-    ) {}
+    ) {
+    }
 
     /**
      * @param Workflow|class-string<Workflow> $workflow
@@ -152,7 +152,13 @@ class SagaCoordinator
             }
 
             $this->driver->store(new SagaStepRecord(
-                $sagaId, $stuck->step, SagaStepStatus::CompensationPending, branch: $stuck->branch, workflow: $workflow::class, payload: $stuck->payload, encrypted: $stuck->encrypted
+                $sagaId,
+                $stuck->step,
+                SagaStepStatus::CompensationPending,
+                branch: $stuck->branch,
+                workflow: $workflow::class,
+                payload: $stuck->payload,
+                encrypted: $stuck->encrypted
             ));
 
             $this->dispatch($this->build($compensator, $sagaId, $workflow::class, $stuck->step, $sync, $stuck->branch), $sync);
@@ -198,8 +204,13 @@ class SagaCoordinator
         // signal's payload never joins the trail; it only ever reaches the job
         // directly, via waitFor().
         $this->driver->store(new SagaStepRecord(
-            $sagaId, $record->step, $status, branch: $record->branch, workflow: $record->workflow,
-            payload: $record->payload, encrypted: $record->encrypted
+            $sagaId,
+            $record->step,
+            $status,
+            branch: $record->branch,
+            workflow: $record->workflow,
+            payload: $record->payload,
+            encrypted: $record->encrypted
         ));
 
         $job = $this->build($jobClass, $sagaId, $record->workflow, $record->step, $sync, $record->branch);
@@ -273,7 +284,9 @@ class SagaCoordinator
             SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::AttemptFailed, SagaStepStatus::Waiting,
         ], true)) {
             $this->stepFailed(
-                $sagaId, $record->workflow, $record->step,
+                $sagaId,
+                $record->workflow,
+                $record->step,
                 new RuntimeException('Compensation started manually.'),
                 sync: $sync
             );
@@ -479,8 +492,13 @@ class SagaCoordinator
         $previous = $this->driver->latestFor($sagaId, $step, $branch);
 
         $this->storeAndDispatch(new SagaStepRecord(
-            $sagaId, $step, SagaStepStatus::Running, branch: $branch, workflow: $workflow,
-            payload: $previous?->payload, encrypted: $previous !== null && $previous->encrypted,
+            $sagaId,
+            $step,
+            SagaStepStatus::Running,
+            branch: $branch,
+            workflow: $workflow,
+            payload: $previous?->payload,
+            encrypted: $previous !== null && $previous->encrypted,
             runningExpiresAt: $this->runningExpiresAt($workflow)
         ), SagaStepStarted::class);
     }
@@ -490,8 +508,13 @@ class SagaCoordinator
         $previous = $this->driver->latestFor($sagaId, $step, $branch);
 
         $this->storeAndDispatch(new SagaStepRecord(
-            $sagaId, $step, SagaStepStatus::Compensating, branch: $branch, workflow: $workflow,
-            payload: $previous?->payload, encrypted: $previous !== null && $previous->encrypted,
+            $sagaId,
+            $step,
+            SagaStepStatus::Compensating,
+            branch: $branch,
+            workflow: $workflow,
+            payload: $previous?->payload,
+            encrypted: $previous !== null && $previous->encrypted,
             runningExpiresAt: $this->runningExpiresAt($workflow)
         ), SagaStepCompensating::class);
     }
@@ -509,9 +532,14 @@ class SagaCoordinator
         $reason = $exception ? $exception::class.': '.$exception->getMessage() : null;
 
         $this->driver->store(new SagaStepRecord(
-            $sagaId, $step, $compensating ? SagaStepStatus::CompensationAttemptFailed : SagaStepStatus::AttemptFailed,
-            branch: $branch, workflow: $workflow,
-            payload: $previous?->payload, reason: $reason, encrypted: $previous !== null && $previous->encrypted,
+            $sagaId,
+            $step,
+            $compensating ? SagaStepStatus::CompensationAttemptFailed : SagaStepStatus::AttemptFailed,
+            branch: $branch,
+            workflow: $workflow,
+            payload: $previous?->payload,
+            reason: $reason,
+            encrypted: $previous !== null && $previous->encrypted,
             runningExpiresAt: $previous?->runningExpiresAt,
         ));
     }
@@ -573,8 +601,13 @@ class SagaCoordinator
     }
 
     public function stepCompleted(
-        string $sagaId, string $workflow, int $step, mixed $result,
-        bool $compensating = false, bool $sync = false, int $branch = 0
+        string $sagaId,
+        string $workflow,
+        int $step,
+        mixed $result,
+        bool $compensating = false,
+        bool $sync = false,
+        int $branch = 0
     ): void {
         $encrypt = $this->shouldEncrypt($workflow);
         $payload = $this->encode($result, $encrypt);
@@ -618,8 +651,13 @@ class SagaCoordinator
     }
 
     public function stepIterated(
-        string $sagaId, string $workflow, int $step, mixed $context,
-        bool $compensating = false, bool $sync = false, int $branch = 0
+        string $sagaId,
+        string $workflow,
+        int $step,
+        mixed $context,
+        bool $compensating = false,
+        bool $sync = false,
+        int $branch = 0
     ): void {
         $encrypt = $this->shouldEncrypt($workflow);
         $payload = $this->encode($context, $encrypt);
@@ -646,8 +684,13 @@ class SagaCoordinator
     }
 
     public function stepAwaitsSignal(
-        string $sagaId, string $workflow, int $step, string $signal, mixed $context,
-        bool $compensating = false, int $branch = 0
+        string $sagaId,
+        string $workflow,
+        int $step,
+        string $signal,
+        mixed $context,
+        bool $compensating = false,
+        int $branch = 0
     ): void {
         $encrypt = $this->shouldEncrypt($workflow);
         $payload = $this->encode($context, $encrypt);
@@ -658,8 +701,15 @@ class SagaCoordinator
         $expiresAt = $timeout !== null ? now()->addSeconds($timeout)->toImmutable() : null;
 
         $this->storeAndDispatch(new SagaStepRecord(
-            $sagaId, $step, $status, branch: $branch, workflow: $workflow, payload: $payload, encrypted: $encrypt,
-            signal: $signal, signalExpiresAt: $expiresAt
+            $sagaId,
+            $step,
+            $status,
+            branch: $branch,
+            workflow: $workflow,
+            payload: $payload,
+            encrypted: $encrypt,
+            signal: $signal,
+            signalExpiresAt: $expiresAt
         ), SagaStepAwaitingSignal::class);
     }
 
@@ -678,9 +728,12 @@ class SagaCoordinator
             }
 
             $this->stepFailed(
-                $record->sagaId, $record->workflow, $record->step,
+                $record->sagaId,
+                $record->workflow,
+                $record->step,
                 new SignalTimeoutException($record->sagaId, $record->step, $record->signal),
-                sync: $sync, branch: $record->branch
+                sync: $sync,
+                branch: $record->branch
             );
         }
 
@@ -698,9 +751,12 @@ class SagaCoordinator
             }
 
             $this->stepFailed(
-                $record->sagaId, $record->workflow, $record->step,
+                $record->sagaId,
+                $record->workflow,
+                $record->step,
                 new StaleSagaStepException($record->sagaId, $record->step),
-                sync: $sync, branch: $record->branch
+                sync: $sync,
+                branch: $record->branch
             );
         }
 
@@ -975,7 +1031,12 @@ class SagaCoordinator
             }
 
             $record = $this->storeAndDispatch(new SagaStepRecord(
-                $sagaId, 0, SagaStepStatus::RolledBack, workflow: $workflow, payload: $previous?->payload, encrypted: $previous !== null && $previous->encrypted
+                $sagaId,
+                0,
+                SagaStepStatus::RolledBack,
+                workflow: $workflow,
+                payload: $previous?->payload,
+                encrypted: $previous !== null && $previous->encrypted
             ), SagaCompensated::class);
 
             $this->event(SagaRolledBack::class, $record);
@@ -1088,8 +1149,7 @@ class SagaCoordinator
                 // $job->middleware ourselves, while going through dispatchNow() itself
                 // (rather than piping around it) means Bus::fake() still intercepts it
                 // exactly like any other dispatched job.
-                app(Dispatcher::class)->dispatchNow($job, new class
-                {
+                app(Dispatcher::class)->dispatchNow($job, new class () {
                     public function handle(object $job): mixed
                     {
                         /** @var object{middleware: array<int, object>} $job */
