@@ -8,5 +8,9 @@
 /phpunit.xml        export-ignore
 /tests              export-ignore
 /.editorconfig      export-ignore
-/.php_cs.dist.php   export-ignore
+/phpstan.neon       export-ignore
 /phpstan.neon.dist  export-ignore
+/pint.json          export-ignore
+/.codeclimate.yml   export-ignore
+/CLAUDE.md          export-ignore
+/PLAN.md            export-ignore

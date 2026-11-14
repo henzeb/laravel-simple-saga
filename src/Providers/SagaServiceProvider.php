@@ -12,6 +12,7 @@ use Henzeb\Saga\Console\Commands\SagaShowCommand;
 use Henzeb\Saga\Console\Commands\SagaSweepSignalsCommand;
 use Henzeb\Saga\Console\Commands\SagaSweepStaleCommand;
 use Henzeb\Saga\SagaManager;
+use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\ServiceProvider;
 
 class SagaServiceProvider extends ServiceProvider
@@ -20,7 +21,7 @@ class SagaServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../../config/saga.php', 'saga');
 
-        $this->app->singleton(SagaManager::class, fn ($app) => new SagaManager($app));
+        $this->app->singleton(SagaManager::class, fn (Container $app) => new SagaManager($app));
         $this->app->alias(SagaManager::class, 'saga');
     }
 

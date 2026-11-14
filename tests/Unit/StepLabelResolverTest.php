@@ -47,6 +47,50 @@ class StepLabelResolverTestInvokableLabel
     }
 }
 
+class StepLabelResolverTestNumericLabel
+{
+    public function __invoke(SagaState $state): int
+    {
+        return 42;
+    }
+}
+
+#[StepLabel(StepLabelResolverTestNumericLabel::class)]
+class StepLabelResolverTestNumericLabeledStep
+{
+    use InteractsWithSaga;
+}
+
+class StepLabelResolverTestNumericLabeledWorkflow extends Workflow
+{
+    public function steps(): array
+    {
+        return [StepLabelResolverTestNumericLabeledStep::class];
+    }
+}
+
+class StepLabelResolverTestArrayLabel
+{
+    public function __invoke(SagaState $state): array
+    {
+        return ['not', 'a', 'label'];
+    }
+}
+
+#[StepLabel(StepLabelResolverTestArrayLabel::class)]
+class StepLabelResolverTestArrayLabeledStep
+{
+    use InteractsWithSaga;
+}
+
+class StepLabelResolverTestArrayLabeledWorkflow extends Workflow
+{
+    public function steps(): array
+    {
+        return [StepLabelResolverTestArrayLabeledStep::class];
+    }
+}
+
 #[StepLabel(StepLabelResolverTestInvokableLabel::class)]
 class StepLabelResolverTestInvokableLabeledStep
 {
@@ -157,6 +201,18 @@ it('resolves a #[StepLabel] pointing at an invokable class, passing it the step\
     ));
 
     expect($label)->toBe('Invoked: ABC-123');
+});
+
+it('casts a scalar returned by an invokable #[StepLabel] class to a string', function () {
+    $label = (new StepLabelResolver())->resolve(stepLabelResolverTestState(StepLabelResolverTestNumericLabeledWorkflow::class, 0));
+
+    expect($label)->toBe('42');
+});
+
+it('falls back to the label class basename when an invokable #[StepLabel] class returns no string', function () {
+    $label = (new StepLabelResolver())->resolve(stepLabelResolverTestState(StepLabelResolverTestArrayLabeledWorkflow::class, 0));
+
+    expect($label)->toBe('StepLabelResolverTestArrayLabel');
 });
 
 it('resolves a #[StepLabel] pointing at a class implementing ProvidesStepLabel', function () {

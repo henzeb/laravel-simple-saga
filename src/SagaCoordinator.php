@@ -773,7 +773,7 @@ class SagaCoordinator
         $entry = $steps[$step];
 
         if ($compensating) {
-            $stored = $this->storeAndDispatch(new SagaStepRecord($sagaId, $step, SagaStepStatus::CompensationFailed, branch: $branch, workflow: $workflow, payload: $record?->payload, reason: $reason, encrypted: $record !== null && $record->encrypted), SagaCompensationFailed::class, $exception);
+            $this->storeAndDispatch(new SagaStepRecord($sagaId, $step, SagaStepStatus::CompensationFailed, branch: $branch, workflow: $workflow, payload: $record?->payload, reason: $reason, encrypted: $record !== null && $record->encrypted), SagaCompensationFailed::class, $exception);
 
             if ($entry instanceof Parallel) {
                 $this->settleGroupCompensation($sagaId, $workflow, $step, $entry, $sync);
@@ -837,7 +837,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, class-string|Parallel> $steps
+     * @param array<class-string|Parallel> $steps
      * @return class-string
      */
     protected function stepClassFor(array $steps, int $step, int $branch): string
@@ -848,7 +848,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, class-string|Parallel> $steps
+     * @param array<class-string|Parallel> $steps
      */
     protected function storeStepEntry(string $sagaId, string $workflow, array $steps, int $step, mixed $payload, bool $encrypted): void
     {
@@ -866,7 +866,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, class-string|Parallel> $steps
+     * @param array<class-string|Parallel> $steps
      */
     protected function dispatchStepEntry(string $sagaId, string $workflow, array $steps, int $step, bool $sync): void
     {
@@ -886,7 +886,7 @@ class SagaCoordinator
     }
 
     /**
-     * @return array<int, ?SagaStepStatus>
+     * @return array<?SagaStepStatus>
      */
     protected function branchStatuses(string $sagaId, int $step, Parallel $entry): array
     {
@@ -900,7 +900,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, ?SagaStepStatus> $statuses
+     * @param array<?SagaStepStatus> $statuses
      * @param list<SagaStepStatus> $allowed
      */
     protected function allIn(array $statuses, array $allowed): bool
@@ -910,7 +910,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, ?SagaStepStatus> $statuses
+     * @param array<?SagaStepStatus> $statuses
      */
     protected function allCompleted(array $statuses): bool
     {
@@ -918,7 +918,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, ?SagaStepStatus> $statuses
+     * @param array<?SagaStepStatus> $statuses
      */
     protected function anyFailed(array $statuses): bool
     {
@@ -926,7 +926,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, ?SagaStepStatus> $statuses
+     * @param array<?SagaStepStatus> $statuses
      */
     protected function allTerminal(array $statuses): bool
     {
@@ -934,7 +934,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, ?SagaStepStatus> $statuses
+     * @param array<?SagaStepStatus> $statuses
      */
     protected function allCompensationSettled(array $statuses): bool
     {
@@ -942,7 +942,7 @@ class SagaCoordinator
     }
 
     /**
-     * @param array<int, ?SagaStepStatus> $statuses
+     * @param array<?SagaStepStatus> $statuses
      */
     protected function anyCompensationFailed(array $statuses): bool
     {

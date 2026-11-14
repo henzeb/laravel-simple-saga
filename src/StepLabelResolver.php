@@ -9,11 +9,12 @@ use Henzeb\Saga\Contracts\ShouldCompensate;
 use Henzeb\Saga\DTO\SagaState;
 use Henzeb\Saga\Enums\SagaStepStatus;
 use ReflectionClass;
+use Stringable;
 use Throwable;
 
 class StepLabelResolver
 {
-    /** @var array<string, array<int, class-string|Parallel>> */
+    /** @var array<string, array<class-string|Parallel>> */
     protected array $stepsByWorkflow = [];
 
     public function __construct(
@@ -97,11 +98,20 @@ class StepLabelResolver
 
             return match (true) {
                 $resolved instanceof ProvidesStepLabel => $resolved->toLabel($state),
-                is_callable($resolved) => $resolved($state),
+                is_callable($resolved) => $this->labelFrom($resolved($state), $value),
                 default => class_basename($value),
             };
         } catch (Throwable) {
             return class_basename($value);
         }
+    }
+
+    protected function labelFrom(mixed $label, string $value): string
+    {
+        if (is_scalar($label) || $label instanceof Stringable) {
+            return (string) $label;
+        }
+
+        return class_basename($value);
     }
 }

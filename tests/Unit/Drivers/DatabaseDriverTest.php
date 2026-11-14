@@ -292,3 +292,50 @@ it('uses the configured table name', function () {
     expect(DB::table('custom_saga_steps')->count())->toBe(1)
         ->and(DB::table('saga_steps')->count())->toBe(0);
 });
+
+function hydratingDatabaseDriver(): DatabaseDriver
+{
+    return new class (DB::connection()) extends DatabaseDriver {
+        public function hydrate(stdClass $row): SagaStepRecord
+        {
+            return $this->toRecord($row);
+        }
+    };
+}
+
+it('hydrates numeric strings and missing optional columns from a row', function () {
+    $record = hydratingDatabaseDriver()->hydrate((object) [
+        'saga_id' => 'saga-1',
+        'step' => '2',
+        'status' => 'completed',
+        'payload' => null,
+        'reason' => null,
+        'recorded_at' => '2030-01-01 12:00:00',
+    ]);
+
+    expect($record->step)->toBe(2)
+        ->and($record->branch)->toBe(0)
+        ->and($record->workflow)->toBeNull()
+        ->and($record->signal)->toBeNull()
+        ->and($record->encrypted)->toBeFalse()
+        ->and($record->signalExpiresAt)->toBeNull()
+        ->and($record->runningExpiresAt)->toBeNull();
+});
+
+it('rejects a row with a column of the wrong type', function (array $overrides, string $message) {
+    $row = (object) array_merge([
+        'saga_id' => 'saga-1',
+        'step' => 0,
+        'status' => 'completed',
+        'payload' => null,
+        'reason' => null,
+        'recorded_at' => '2030-01-01 12:00:00',
+    ], $overrides);
+
+    expect(fn () => hydratingDatabaseDriver()->hydrate($row))
+        ->toThrow(UnexpectedValueException::class, $message);
+})->with([
+    'saga_id' => [['saga_id' => 1], 'Column [saga_id] of a saga step row is not a string.'],
+    'reason' => [['reason' => 1], 'Column [reason] of a saga step row is not a string.'],
+    'step' => [['step' => 'first'], 'Column [step] of a saga step row is not an integer.'],
+]);

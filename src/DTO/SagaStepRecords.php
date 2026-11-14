@@ -13,21 +13,25 @@ use LogicException;
  */
 class SagaStepRecords extends Collection
 {
+    // @phpstan-ignore selfOut.type
     public function push(...$values): static
     {
         throw $this->immutable();
     }
 
+    // @phpstan-ignore selfOut.type
     public function add($item): static
     {
         throw $this->immutable();
     }
 
+    // @phpstan-ignore selfOut.type
     public function prepend($value, $key = null): static
     {
         throw $this->immutable();
     }
 
+    // @phpstan-ignore selfOut.type
     public function unshift(...$values): static
     {
         throw $this->immutable();
@@ -38,6 +42,7 @@ class SagaStepRecords extends Collection
         throw $this->immutable();
     }
 
+    // @phpstan-ignore selfOut.type
     public function shift($count = 1): mixed
     {
         throw $this->immutable();
@@ -48,6 +53,7 @@ class SagaStepRecords extends Collection
         throw $this->immutable();
     }
 
+    // @phpstan-ignore selfOut.type
     public function put($key, $value): static
     {
         throw $this->immutable();
@@ -58,6 +64,7 @@ class SagaStepRecords extends Collection
         throw $this->immutable();
     }
 
+    // @phpstan-ignore selfOut.type
     public function splice($offset, $length = null, $replacement = []): static
     {
         throw $this->immutable();

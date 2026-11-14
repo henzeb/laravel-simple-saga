@@ -12,6 +12,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use stdClass;
+use UnexpectedValueException;
 
 class DatabaseDriver implements Driver
 {
@@ -178,23 +179,64 @@ class DatabaseDriver implements Driver
 
     protected function toRecord(stdClass $row): SagaStepRecord
     {
+        $payload = $this->nullableString($row, 'payload');
+        $signalExpiresAt = $this->nullableString($row, 'signal_expires_at');
+        $runningExpiresAt = $this->nullableString($row, 'running_expires_at');
+
         return new SagaStepRecord(
-            sagaId: $row->saga_id,
-            step: (int) $row->step,
-            status: SagaStepStatus::from($row->status),
-            branch: (int) ($row->branch ?? 0),
-            workflow: $row->workflow ?? null,
-            payload: $row->payload !== null ? json_decode($row->payload, true) : null,
-            reason: $row->reason,
-            recordedAt: Carbon::parse($row->recorded_at)->toImmutable(),
-            encrypted: (bool) $row->encrypted,
-            signal: $row->signal ?? null,
-            signalExpiresAt: isset($row->signal_expires_at) && $row->signal_expires_at !== null
-                ? Carbon::parse($row->signal_expires_at)->toImmutable()
-                : null,
-            runningExpiresAt: isset($row->running_expires_at) && $row->running_expires_at !== null
-                ? Carbon::parse($row->running_expires_at)->toImmutable()
-                : null,
+            sagaId: $this->string($row, 'saga_id'),
+            step: $this->integer($row, 'step'),
+            status: SagaStepStatus::from($this->string($row, 'status')),
+            branch: $this->integer($row, 'branch'),
+            workflow: $this->nullableString($row, 'workflow'),
+            payload: $payload !== null ? json_decode($payload, true) : null,
+            reason: $this->nullableString($row, 'reason'),
+            recordedAt: Carbon::parse($this->string($row, 'recorded_at'))->toImmutable(),
+            encrypted: (bool) ($row->encrypted ?? false),
+            signal: $this->nullableString($row, 'signal'),
+            signalExpiresAt: $signalExpiresAt !== null ? Carbon::parse($signalExpiresAt)->toImmutable() : null,
+            runningExpiresAt: $runningExpiresAt !== null ? Carbon::parse($runningExpiresAt)->toImmutable() : null,
         );
+    }
+
+    private function string(stdClass $row, string $column): string
+    {
+        $value = $row->{$column} ?? null;
+
+        if (is_string($value)) {
+            return $value;
+        }
+
+        throw new UnexpectedValueException("Column [{$column}] of a saga step row is not a string.");
+    }
+
+    private function nullableString(stdClass $row, string $column): ?string
+    {
+        $value = $row->{$column} ?? null;
+
+        if ($value === null || is_string($value)) {
+            return $value;
+        }
+
+        throw new UnexpectedValueException("Column [{$column}] of a saga step row is not a string.");
+    }
+
+    private function integer(stdClass $row, string $column): int
+    {
+        $value = $row->{$column} ?? null;
+
+        if ($value === null) {
+            return 0;
+        }
+
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        throw new UnexpectedValueException("Column [{$column}] of a saga step row is not an integer.");
     }
 }

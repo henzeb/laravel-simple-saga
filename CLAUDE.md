@@ -11,7 +11,7 @@ can resume after a crash, retry a stale step, or walk backward through compensat
 ## Commands
 
 ```bash
-composer install            # install dependencies (requires resolving a Laravel/testbench version — see below)
+composer install            # install dependencies
 
 composer test                # vendor/bin/pest
 composer test-parallel       # vendor/bin/pest --parallel
@@ -21,11 +21,14 @@ composer test-dox            # vendor/bin/pest --testdox
 composer test-mutate         # XDEBUG_MODE=coverage vendor/bin/pest --mutate
 
 vendor/bin/pest tests/Unit/SagaCoordinatorTest.php   # run a single test file
-vendor/bin/phpstan analyse    # static analysis (level 9, see phpstan.neon)
+vendor/bin/phpstan analyse   # static analysis (level max with Larastan, see phpstan.neon.dist)
+vendor/bin/pint              # code style (psr12 preset, see pint.json)
 ```
 
-`phpstan.neon` is gitignored (present locally but not committed) — matching the sibling package this repo was
-bootstrapped from.
+`phpstan.neon.dist` is committed; a local `phpstan.neon` overrides it and is gitignored. Inline
+`@phpstan-ignore` is limited to the throwing overrides in `DTO\SagaTrail`/`DTO\SagaStepRecords` (Collection's
+self-out types), the unused-trait report on `Concerns\IterableSagaStep`, and the protected `IterableSagaStep`
+calls in `Middleware\ProcessesSaga`.
 
 ## Architecture
 
@@ -136,13 +139,11 @@ it always fails the step, never retries it.
 
 ## Version support
 
-Supports PHP 8.3–8.5 and Laravel 11–13 simultaneously (`composer.json` requires
-`illuminate/support: ^11.0|^12.0|^13.0`, `orchestra/testbench: ^9.0|^10.0|^11.0`). When adding code, avoid APIs
-that only exist in a subset of that range. CI (`.github/workflows/tests.yml`) verifies only the boundaries of that
-range — PHP 8.3/8.5, Laravel 11/13, each × dependency-stability (`prefer-lowest`/`prefer-stable`), 8 jobs total —
-on the assumption that the versions in between don't need their own job if both ends pass; the "Set Laravel
-version" step pins `illuminate/support` and `orchestra/testbench` to the matrix's Laravel version before
-`composer update` resolves the rest.
+Supports PHP 8.3–8.6 and Laravel 12–13 simultaneously (`composer.json` requires
+`illuminate/support: ^12.71|^13.0`, `orchestra/testbench: ^10.2|^11.0`). When adding code, avoid APIs that only
+exist in a subset of that range. CI (`.github/workflows/tests.yml`) lints on PHP 8.6, runs Pint and PHPStan on PHP
+8.6 with `prefer-stable`, and runs the tests on PHP 8.3 and 8.6, each with `prefer-lowest` and `prefer-stable`;
+`prefer-lowest` resolves Laravel 12 and `prefer-stable` on PHP 8.3+ resolves Laravel 13.
 
 ## Tests
 

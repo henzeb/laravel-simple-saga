@@ -17,9 +17,11 @@ class SagaCompensateCommand extends Command
 
     protected $description = 'Manually compensate one saga by ID — stuck mid-run (Pending, Running, Waiting) or already Completed; without a sagaId, compensates every saga stuck since before a given date (optionally scoped to one workflow) — Completed sagas are never swept up in bulk';
 
-    protected const STUCK = [SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::AttemptFailed, SagaStepStatus::Waiting];
+    /** @var array<int, SagaStepStatus> */
+    protected const array STUCK = [SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::AttemptFailed, SagaStepStatus::Waiting];
 
-    protected const COMPENSATABLE = [SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::AttemptFailed, SagaStepStatus::Waiting, SagaStepStatus::Completed];
+    /** @var array<int, SagaStepStatus> */
+    protected const array COMPENSATABLE = [SagaStepStatus::Pending, SagaStepStatus::Running, SagaStepStatus::AttemptFailed, SagaStepStatus::Waiting, SagaStepStatus::Completed];
 
     public function handle(SagaManager $saga): int
     {

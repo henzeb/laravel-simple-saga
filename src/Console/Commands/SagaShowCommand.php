@@ -16,7 +16,8 @@ class SagaShowCommand extends Command
 
     protected $description = 'Show the current status of one saga; pass --trail for its full history';
 
-    protected const COLORS = [
+    /** @var array<string, string> */
+    protected const array COLORS = [
         SagaStepStatus::Pending->value => 'yellow',
         SagaStepStatus::Running->value => 'yellow',
         SagaStepStatus::AttemptFailed->value => 'yellow',
@@ -173,8 +174,9 @@ class SagaShowCommand extends Command
 
     protected function reason(string $reason): string
     {
-        [$class, $message] = array_pad(explode(': ', $reason, 2), 2, null);
-        $class = $this->sanitize($class);
+        $parts = explode(': ', $reason, 2);
+        $class = $this->sanitize($parts[0]);
+        $message = $parts[1] ?? null;
 
         if ($message === null) {
             return $class;

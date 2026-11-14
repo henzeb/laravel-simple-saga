@@ -18,6 +18,10 @@ class SagaState
 
     private ?string $resolvedLabel = null;
 
+    /**
+     * @param Closure(): SagaContext $contextResolver
+     * @param Closure(): SagaTrail<int, SagaState> $trailResolver
+     */
     public function __construct(
         public readonly string $sagaId,
         public readonly ?string $workflow,
